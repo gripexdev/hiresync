@@ -1,6 +1,5 @@
 import { Injectable, OnDestroy, inject } from '@angular/core';
 import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
-import SockJS from 'sockjs-client';
 import { Subject, Observable, filter, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../auth/auth.service';
@@ -12,16 +11,17 @@ export interface WsMessage<T = unknown> {
 }
 
 /**
- * WebSocket service — STOMP over SockJS.
+ * WebSocket service — STOMP over native WebSocket (no SockJS).
  *
- * Backend wiring (Spring Boot):
- *   @EnableWebSocketMessageBroker
- *   registry.addEndpoint("/ws/notifications").withSockJS()
- *   registry.enableSimpleBroker("/topic", "/user")
+ * SockJS was removed because sockjs-client uses Node.js's `global` which
+ * doesn't exist in the browser and crashes Vite's dependency pre-bundler.
+ * Modern browsers (Chrome, Firefox, Edge, Safari) all support native WebSocket.
  *
- * Topics used:
- *   /user/topic/cv-optimization   — CV Optimizer Service pushes completion events
- *   /topic/notifications          — global broadcast (future)
+ * Backend wiring (Spring Boot WebSocketConfig):
+ *   registry.addEndpoint("/ws/notifications").setAllowedOriginPatterns("*")   ← native WS
+ *   registry.addEndpoint("/ws/notifications").withSockJS()                     ← SockJS (optional)
+ *
+ * Native WebSocket URL format: ws://host/path  (not http://)
  */
 @Injectable({ providedIn: 'root' })
 export class WebSocketService implements OnDestroy {
@@ -30,8 +30,7 @@ export class WebSocketService implements OnDestroy {
   private subs   = new Map<string, StompSubscription>();
   private msgs$  = new Subject<WsMessage>();
 
-  // ── Typed streams ────────────────────────────────────────────────────────────
-  /** CV optimization progress/completion events from the backend */
+  // ── Typed streams ─────────────────────────────────────────────────────────────
   readonly cvOptimization$: Observable<CVOptimizationWsEvent> = this.msgs$.pipe(
     filter(m => m.destination === '/user/topic/cv-optimization'),
     map(m => m.payload as CVOptimizationWsEvent),
@@ -40,34 +39,37 @@ export class WebSocketService implements OnDestroy {
   // ── Connection ────────────────────────────────────────────────────────────────
   connect(): void {
     if (this.client?.connected) return;
+    try {
+      // Convert http:// base URL to ws:// for native WebSocket
+      const wsUrl = environment.wsUrl
+        .replace(/^https:\/\//, 'wss://')
+        .replace(/^http:\/\//, 'ws://');
 
-    this.client = new Client({
-      // SockJS transport — matches Spring Boot endpoint
-      webSocketFactory: () => new SockJS(`${environment.wsUrl}/notifications`) as WebSocket,
+      this.client = new Client({
+        // Native WebSocket — no SockJS dependency needed
+        brokerURL: `${wsUrl}/notifications`,
 
-      // Attach JWT so the backend's HandshakeInterceptor can authenticate
-      connectHeaders: {
-        Authorization: `Bearer ${this.auth.token() ?? ''}`,
-      },
+        connectHeaders: {
+          Authorization: `Bearer ${this.auth.token() ?? ''}`,
+        },
 
-      // Auto-reconnect every 5s on disconnect
-      reconnectDelay: 5000,
+        reconnectDelay: 5000,
 
-      onConnect: () => {
-        this._subscribe('/user/topic/cv-optimization');
-        this._subscribe('/user/topic/notifications');
-      },
+        onConnect: () => {
+          this._subscribe('/user/topic/cv-optimization');
+          this._subscribe('/user/topic/notifications');
+        },
 
-      onDisconnect: () => {
-        this.subs.clear();
-      },
+        onDisconnect: () => this.subs.clear(),
 
-      onStompError: (frame) => {
-        console.error('[WS] STOMP error:', frame.headers['message']);
-      },
-    });
+        onStompError: frame =>
+          console.warn('[WS] STOMP error:', frame.headers['message']),
+      });
 
-    this.client.activate();
+      this.client.activate();
+    } catch (e) {
+      console.warn('[WS] WebSocket not available:', e);
+    }
   }
 
   disconnect(): void {
@@ -76,7 +78,6 @@ export class WebSocketService implements OnDestroy {
     this.client?.deactivate();
   }
 
-  /** Subscribe to an additional destination at runtime */
   subscribeTo<T>(destination: string): Observable<T> {
     this._subscribe(destination);
     return this.msgs$.pipe(
@@ -85,7 +86,6 @@ export class WebSocketService implements OnDestroy {
     );
   }
 
-  // ── Internal ──────────────────────────────────────────────────────────────────
   private _subscribe(dest: string): void {
     if (this.subs.has(dest) || !this.client?.connected) return;
     const sub = this.client.subscribe(dest, (msg: IMessage) => {

@@ -191,7 +191,23 @@ $primary: #2E86AB; $accent: #17A589;
 
 .view-link {
   display: flex; align-items: center; justify-content: center;
-  color: $primary; text-decoration: none;
+  color: $primary; text-decoration: none; cursor: pointer;
   mat-icon { font-size: 16px; width: 16px; height: 16px; }
   &:hover { opacity: 0.7; }
+}
+
+.view-link-disabled {
+  display: flex; align-items: center; justify-content: center;
+  color: #CBD5E1; cursor: default;
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+}
+
+// Failed row — subtle red tint
+.tr-failed td { background: #FFF5F5; color: #94A3B8; }
+
+// Status chips
+.status-chip {
+  padding: 3px 9px; border-radius: 9999px; font-size: 12px; font-weight: 600;
+  &--failed  { background: #FEE2E2; color: #B91C1C; }
+  &--pending { background: #FEF3C7; color: #92400E; }
 }

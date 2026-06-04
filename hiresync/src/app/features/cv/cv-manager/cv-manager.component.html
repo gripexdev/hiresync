@@ -185,7 +185,7 @@
       </thead>
       <tbody>
         @for (item of history(); track item.id) {
-          <tr>
+          <tr [class.tr-failed]="item.status === 'failed'">
             <td class="td-job">
               <span class="td-job__title">{{ item.jobTitle }}</span>
               <span class="td-job__company">{{ item.company }}</span>
@@ -195,16 +195,37 @@
               <span class="score-chip score-chip--before">{{ item.originalScore }}%</span>
             </td>
             <td>
-              <span class="score-chip score-chip--after">{{ item.optimizedScore }}%</span>
+              @if (item.status === 'failed') {
+                <span class="status-chip status-chip--failed">Échec</span>
+              } @else if (item.status === 'completed') {
+                <span class="score-chip score-chip--after">{{ item.optimizedScore }}%</span>
+              } @else {
+                <span class="status-chip status-chip--pending">En cours…</span>
+              }
             </td>
             <td>
-              <span class="gain-chip">+{{ item.optimizedScore - item.originalScore }} pts</span>
+              @if (item.status === 'completed') {
+                <span class="gain-chip">+{{ item.optimizedScore - item.originalScore }} pts</span>
+              } @else {
+                <span>—</span>
+              }
             </td>
-            <td class="td-model">Mistral 7B</td>
+            <td class="td-model">{{ modelLabel(item) }}</td>
             <td>
-              <a [routerLink]="'/cv/optimize/' + item.id" class="view-link">
-                <mat-icon>open_in_new</mat-icon>
-              </a>
+              @if (item.status === 'completed') {
+                <a [routerLink]="'/cv/optimize/' + item.id" class="view-link"
+                   matTooltip="Voir le résultat complet">
+                  <mat-icon>open_in_new</mat-icon>
+                </a>
+              } @else if (item.status === 'failed') {
+                <span class="view-link-disabled" matTooltip="Optimisation échouée">
+                  <mat-icon>error_outline</mat-icon>
+                </span>
+              } @else {
+                <span class="view-link-disabled" matTooltip="En cours…">
+                  <mat-icon>hourglass_empty</mat-icon>
+                </span>
+              }
             </td>
           </tr>
         }

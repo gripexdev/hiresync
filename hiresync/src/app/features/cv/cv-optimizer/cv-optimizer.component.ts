@@ -64,13 +64,21 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
   ngOnInit(): void {
-    // Grab context from query params (set by cv-manager when triggering a new job)
     const q = this.route.snapshot.queryParams;
     this.jobTitle.set(q['jobTitle'] ?? '');
     this.jobId.set(q['jobId'] ?? '');
     this.cvId.set(q['cvId'] ?? '');
 
-    this._startProcessing();
+    // ── Key decision: is this a history view or a fresh optimization? ─────────
+    // When coming from history table: no query params → fetch result directly
+    // When coming from cv-manager (new job): has cvId query param → start processing
+    const isNewOptimization = !!q['cvId'];
+
+    if (isNewOptimization) {
+      this._startProcessing();
+    } else {
+      this._loadExistingResult();
+    }
   }
 
   ngOnDestroy(): void {
@@ -80,7 +88,31 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
     this.cancel$.complete();
   }
 
-  // ── Processing flow ───────────────────────────────────────────────────────────
+  // ── View existing result from history ────────────────────────────────────────
+  private _loadExistingResult(): void {
+    this.status.set('processing'); // show a brief spinner while fetching
+    this.cvSvc.getOptimizationResult(this.id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: r => {
+          // Populate job title from the result (not from query params)
+          this.jobTitle.set(r.jobTitle ?? '');
+          if (r.status === 'completed') {
+            this._markAllStepsDone();
+            this.result.set(r);
+            this.status.set('completed');
+          } else if (r.status === 'failed') {
+            this.status.set('failed');
+          } else {
+            // Still processing — join the live flow
+            this._startProcessing();
+          }
+        },
+        error: () => this.status.set('failed'),
+      });
+  }
+
+  // ── Processing flow (new optimization) ───────────────────────────────────────
   private _startProcessing(): void {
     this.status.set('processing');
     this._animateSteps();

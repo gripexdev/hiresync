@@ -16,7 +16,8 @@
    - [4.3 Optimisation IA (OpenRouter + Gemma 4)](#43-optimisation-ia-openrouter--gemma-4)
    - [4.4 Pipeline RabbitMQ (traitement asynchrone)](#44-pipeline-rabbitmq-traitement-asynchrone)
    - [4.5 Notifications WebSocket (STOMP)](#45-notifications-websocket-stomp)
-   - [4.6 Frontend Angular — 9 pages](#46-frontend-angular--9-pages)
+   - [4.6 Consultation de l'historique des optimisations](#46-consultation-de-lhistorique-des-optimisations)
+   - [4.7 Frontend Angular — 9 pages](#47-frontend-angular--9-pages)
 5. [Lancer le projet](#5-lancer-le-projet)
 6. [Endpoints API](#6-endpoints-api)
 7. [Variables de configuration](#7-variables-de-configuration)
@@ -315,9 +316,55 @@ Spring Boot (NotificationService)          Angular (WebSocketService)
 **Fallback polling :**  
 Si le WebSocket n'est pas connecté (réseau instable, firewall…), Angular interroge `GET /api/cv/optimize/{id}` toutes les **3 secondes** jusqu'à `status === "completed"`. Le polling s'arrête automatiquement quand le WebSocket envoie le résultat.
 
+**Migration SockJS → WebSocket natif :**  
+`sockjs-client` utilisait l'objet Node.js `global` qui n'existe pas dans les navigateurs, ce qui crashait silencieusement le routing Angular. Solution : remplacement par le WebSocket natif du navigateur via `brokerURL` dans `@stomp/stompjs`. Le backend Spring Boot expose désormais deux endpoints : un natif (`/ws/notifications`) et un SockJS pour compatibilité.
+
 ---
 
-### 4.6 Frontend Angular — 9 pages
+### 4.6 Consultation de l'historique des optimisations
+
+**Ce qui a été ajouté :**
+- Détection automatique du mode dans `CvOptimizerComponent` : nouvel appel IA vs consultation d'un résultat existant
+- Méthode `_loadExistingResult()` — récupère directement le résultat sauvegardé en DB sans relancer l'IA
+- Tableau d'historique enrichi dans le CV Manager : statuts `completed`/`failed`/`en cours`, noms de modèles réels
+
+**Comment ça marche :**
+
+Le composant `/cv/optimize/:id` fonctionne maintenant dans **deux modes** :
+
+```
+Mode 1 — Nouvelle optimisation (depuis "Optimiser IA")
+  URL: /cv/optimize/:id?cvId=...&jobId=...&jobTitle=...
+                │
+  → isNewOptimization = true
+  → _startProcessing() → animation IA → RabbitMQ → Gemma → WebSocket → résultat
+
+Mode 2 — Consultation historique (depuis le tableau)
+  URL: /cv/optimize/:id   (aucun query param)
+                │
+  → isNewOptimization = false
+  → _loadExistingResult() → GET /api/cv/optimize/{id} → résultat immédiat
+```
+
+Le mode est détecté par la présence ou l'absence du query param `?cvId=` dans l'URL :
+```typescript
+ngOnInit() {
+  const isNewOptimization = !!this.route.snapshot.queryParams['cvId'];
+  if (isNewOptimization) this._startProcessing();
+  else                   this._loadExistingResult(); // affiche le résultat sauvegardé
+}
+```
+
+**Tableau d'historique :**
+| Statut | Affichage | Lien |
+|--------|-----------|------|
+| `completed` | Score avant/après + gain en pts + nom du modèle | ✅ Cliquable → résultat complet |
+| `failed` | Badge rouge "Échec" | ⚠️ Icône erreur (non cliquable) |
+| `processing` | Badge jaune "En cours…" | ⏳ Icône hourglass (non cliquable) |
+
+---
+
+### 4.7 Frontend Angular — 9 pages
 
 | Page | Route | Données |
 |------|-------|---------|

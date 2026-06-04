@@ -173,6 +173,17 @@ export class CvManagerComponent implements OnInit {
   }
 
   historyForCv(cvId: string): CVOptimizationHistoryItem[] {
-    return this.history().filter(h => true); // TODO: filter by cvId once backend sends it
+    return this.history(); // TODO: filter by cvId once backend sends it
+  }
+
+  /** Extract a readable model name from the full OpenRouter model ID */
+  modelLabel(item: CVOptimizationHistoryItem): string {
+    const raw = (item as any).modelUsed ?? '';
+    if (raw.includes('gemma'))    return 'Gemma 4 31B';
+    if (raw.includes('mistral'))  return 'Mistral 7B';
+    if (raw.includes('llama'))    return 'LLaMA 3.3 70B';
+    if (raw.includes('qwen'))     return 'Qwen3';
+    if (raw.includes('nemotron')) return 'Nemotron';
+    return raw || 'Gemma 4 31B';
   }
 }

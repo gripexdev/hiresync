@@ -85,4 +85,5 @@ export interface CVOptimizationHistoryItem {
   optimizedScore: number;
   createdAt: string;
   status: OptimizationStatus;
+  modelUsed?: string;
 }

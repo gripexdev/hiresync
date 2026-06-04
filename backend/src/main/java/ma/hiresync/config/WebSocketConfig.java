@@ -16,8 +16,14 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // Native WebSocket endpoint (brokerURL in Angular @stomp/stompjs)
+        // Used by modern browsers — no SockJS dependency needed in the frontend
         registry.addEndpoint("/ws/notifications")
-                .setAllowedOriginPatterns("http://localhost:4200", "http://localhost:4201")
+                .setAllowedOriginPatterns("*");
+
+        // SockJS fallback endpoint (kept for older browser compatibility)
+        registry.addEndpoint("/ws/notifications")
+                .setAllowedOriginPatterns("*")
                 .withSockJS();
     }
 
