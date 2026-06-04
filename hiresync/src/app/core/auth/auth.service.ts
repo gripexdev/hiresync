@@ -1,46 +1,45 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, of, throwError, tap } from 'rxjs';
+import { Observable, tap } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { AuthResponse, LoginRequest, RegisterRequest, User } from '../models/user.model';
 
 const TOKEN_KEY = 'hs_token';
 const USER_KEY  = 'hs_user';
 
-// ── Mock data (remove once backend is ready) ──────────────────────────────────
-const MOCK_USER: User = {
-  id: 'u1',
-  fullName: 'Othmane Sadiky',
-  email: 'othmane@hiresync.ma',
-  avatarUrl: 'https://ui-avatars.com/api/?name=Othmane+Sadiky&background=2E86AB&color=fff&size=128',
-  createdAt: '2025-09-01T10:00:00Z',
-};
+/** Shape the Spring Boot backend actually returns */
+interface BackendAuthResponse {
+  token:    string;
+  userId:   string;
+  fullName: string;
+  email:    string;
+}
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly _user = signal<User | null>(this._loadUser());
-  private readonly _token = signal<string | null>(localStorage.getItem(TOKEN_KEY));
+  private readonly _user    = signal<User | null>(this._loadUser());
+  private readonly _token   = signal<string | null>(localStorage.getItem(TOKEN_KEY));
 
-  readonly user     = this._user.asReadonly();
-  readonly token    = this._token.asReadonly();
+  readonly user       = this._user.asReadonly();
+  readonly token      = this._token.asReadonly();
   readonly isLoggedIn = computed(() => !!this._token());
 
   constructor(private http: HttpClient, private router: Router) {}
 
   login(req: LoginRequest): Observable<AuthResponse> {
-    // TODO: replace with real API call: return this.http.post<AuthResponse>(`${environment.apiUrl}/auth/login`, req)
-    const mock: AuthResponse = { token: 'mock-jwt-token', user: MOCK_USER };
-    this._persist(mock);
-    return of(mock);
+    return this.http.post<BackendAuthResponse>(`${environment.apiUrl}/auth/login`, req).pipe(
+      map(r => this._toAuthResponse(r)),
+      tap(r => this._persist(r)),
+    );
   }
 
   register(req: RegisterRequest): Observable<AuthResponse> {
-    // TODO: replace with real API call: return this.http.post<AuthResponse>(`${environment.apiUrl}/auth/register`, req)
-    const newUser: User = { ...MOCK_USER, id: 'u2', fullName: req.fullName, email: req.email };
-    const mock: AuthResponse = { token: 'mock-jwt-token', user: newUser };
-    this._persist(mock);
-    return of(mock);
+    return this.http.post<BackendAuthResponse>(`${environment.apiUrl}/auth/register`, req).pipe(
+      map(r => this._toAuthResponse(r)),
+      tap(r => this._persist(r)),
+    );
   }
 
   logout(): void {
@@ -49,6 +48,17 @@ export class AuthService {
     this._user.set(null);
     this._token.set(null);
     this.router.navigate(['/login']);
+  }
+
+  private _toAuthResponse(r: BackendAuthResponse): AuthResponse {
+    const user: User = {
+      id:       r.userId,
+      fullName: r.fullName,
+      email:    r.email,
+      avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(r.fullName)}&background=2E86AB&color=fff&size=128`,
+      createdAt: new Date().toISOString(),
+    };
+    return { token: r.token, user };
   }
 
   private _persist(res: AuthResponse): void {

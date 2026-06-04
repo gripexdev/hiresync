@@ -1,15 +1,30 @@
 <div class="page-header">
   <h1>Mon CV</h1>
-  <p>Gérez vos CV et consultez leurs scores ATS</p>
+  <p>Gérez vos CV, consultez leurs scores ATS et lancez l'optimisation IA</p>
 </div>
 
-<!-- Upload zone -->
-<div class="upload-zone" (click)="fileInput.click()" [class.upload-zone--loading]="uploading()">
+<!-- ── Upload zone ──────────────────────────────────────────────────────────── -->
+<div class="upload-zone"
+     [class.upload-zone--active]="uploading()"
+     (click)="!uploading() && fileInput.click()"
+     (dragover)="$event.preventDefault()"
+     (drop)="$event.preventDefault()">
+
   <input #fileInput type="file" accept=".pdf,.doc,.docx" hidden (change)="onFileSelected($event)" />
 
   @if (uploading()) {
-    <mat-spinner diameter="36" />
-    <span>Analyse du CV en cours…</span>
+    <div class="upload-progress">
+      <div class="upload-progress__bar">
+        <div class="upload-progress__fill" [style.width]="uploadProgress() + '%'"></div>
+      </div>
+      <div class="upload-progress__info">
+        <mat-spinner diameter="16" />
+        <span>Upload en cours… {{ uploadProgress() }}%</span>
+        @if (uploadProgress() === 100) {
+          <span class="upload-progress__parse">Analyse ATS du CV…</span>
+        }
+      </div>
+    </div>
   } @else {
     <div class="upload-zone__icon"><mat-icon>upload_file</mat-icon></div>
     <div class="upload-zone__text">
@@ -19,32 +34,46 @@
   }
 </div>
 
+<!-- ── CV list ──────────────────────────────────────────────────────────────── -->
 @if (loading()) {
   <div class="loading-center"><mat-spinner diameter="40" /></div>
+} @else if (cvs().length === 0) {
+  <div class="empty-state">
+    <mat-icon>description</mat-icon>
+    <h3>Aucun CV uploadé</h3>
+    <p>Uploadez votre premier CV pour commencer l'optimisation IA</p>
+  </div>
 } @else {
   <div class="cv-grid">
     @for (cv of cvs(); track cv.id) {
       <div class="hs-card cv-card" [class.cv-card--active]="cv.isActive">
+
+        <!-- Active badge -->
         @if (cv.isActive) {
-          <div class="cv-active-badge"><mat-icon>check_circle</mat-icon> CV actif</div>
+          <div class="cv-active-badge">
+            <mat-icon>check_circle</mat-icon> CV actif
+          </div>
         }
 
+        <!-- Header: icon + info + ATS ring -->
         <div class="cv-card__header">
           <div class="cv-card__file-icon"><mat-icon>picture_as_pdf</mat-icon></div>
           <div class="cv-card__info">
-            <span class="cv-card__name">{{ cv.fileName }}</span>
-            <span class="cv-card__date">Uploadé le {{ cv.uploadedAt | date:'dd/MM/yyyy' }}</span>
+            <span class="cv-card__name" [matTooltip]="cv.fileName">{{ cv.fileName }}</span>
+            <span class="cv-card__meta">
+              {{ cv.uploadedAt | date:'dd/MM/yyyy' }}
+              @if (cv.fileSize) { · {{ formatSize(cv.fileSize) }} }
+              @if (cv.optimizationCount) { · {{ cv.optimizationCount }} optim. }
+            </span>
           </div>
 
-          <!-- ATS Score ring -->
           @if (cv.atsScore > 0) {
             <div class="ats-ring-wrap">
               <svg viewBox="0 0 64 64" class="ats-ring">
                 <circle cx="32" cy="32" r="28" fill="none" stroke="#E2E8F0" stroke-width="5"/>
                 <circle cx="32" cy="32" r="28" fill="none"
                   [attr.stroke]="scoreColor(cv.atsScore)"
-                  stroke-width="5"
-                  stroke-linecap="round"
+                  stroke-width="5" stroke-linecap="round"
                   [attr.stroke-dasharray]="circumference"
                   [attr.stroke-dashoffset]="dashOffset(cv.atsScore)"
                   transform="rotate(-90 32 32)"/>
@@ -57,6 +86,7 @@
           }
         </div>
 
+        <!-- Score bar -->
         @if (cv.atsScore > 0) {
           <div class="cv-score-bar">
             <div class="cv-score-bar__fill"
@@ -65,17 +95,28 @@
             </div>
           </div>
           <div class="cv-score-meta">
-            <span [style.color]="scoreColor(cv.atsScore)" style="font-weight:600">{{ scoreLabel(cv.atsScore) }}</span>
-            <span class="cv-score-tip">
-              @if (cv.atsScore < 70) { Optimisez ce CV avec l'IA pour augmenter vos chances }
-              @else { Bon score — votre CV passe la plupart des filtres ATS }
+            <span [style.color]="scoreColor(cv.atsScore)" style="font-weight:600">
+              {{ scoreLabel(cv.atsScore) }}
             </span>
+            <span class="cv-score-tip">
+              @if (cv.atsScore < 70) {
+                Optimisez ce CV avec l'IA pour augmenter vos chances
+              } @else {
+                Bon score — votre CV passe la plupart des filtres ATS
+              }
+            </span>
+          </div>
+        } @else {
+          <div class="cv-no-score">
+            <mat-icon>hourglass_empty</mat-icon>
+            Score ATS en cours de calcul…
           </div>
         }
 
-        @if (cv.parsedSections) {
+        <!-- Parsed sections -->
+        @if (cv.parsedSections?.length) {
           <div class="cv-sections">
-            @for (section of cv.parsedSections; track section.title) {
+            @for (section of cv.parsedSections!; track section.title) {
               <div class="cv-section">
                 <span class="cv-section__title">{{ section.title }}</span>
                 <p class="cv-section__content">{{ section.content }}</p>
@@ -84,15 +125,90 @@
           </div>
         }
 
+        <!-- Actions row -->
         <div class="cv-card__actions">
-          <a routerLink="/jobs" class="hs-btn-secondary cv-btn">
-            <mat-icon>work_outline</mat-icon> Trouver des offres
-          </a>
-          <a routerLink="/cv/optimize/opt1" class="hs-btn-accent cv-btn">
-            <mat-icon>auto_awesome</mat-icon> Optimiser l'IA
-          </a>
+          <!-- Optimize -->
+          <button class="hs-btn-accent cv-btn" (click)="openOptimizeDialog(cv)"
+                  matTooltip="Optimiser ce CV pour une offre avec l'IA">
+            <mat-icon>auto_awesome</mat-icon> Optimiser IA
+          </button>
+
+          <!-- Set active -->
+          @if (!cv.isActive) {
+            <button class="hs-btn-secondary cv-btn"
+                    [disabled]="activating() === cv.id"
+                    (click)="setActive(cv)"
+                    matTooltip="Définir comme CV actif">
+              @if (activating() === cv.id) {
+                <mat-spinner diameter="14" />
+              } @else {
+                <mat-icon>check_circle_outline</mat-icon>
+              }
+              Activer
+            </button>
+          }
+
+          <!-- Delete -->
+          <button class="cv-btn cv-btn--delete"
+                  [disabled]="deleting() === cv.id"
+                  (click)="deleteCv(cv)"
+                  matTooltip="Supprimer ce CV">
+            @if (deleting() === cv.id) {
+              <mat-spinner diameter="14" />
+            } @else {
+              <mat-icon>delete_outline</mat-icon>
+            }
+          </button>
         </div>
       </div>
     }
+  </div>
+}
+
+<!-- ── Optimization history ─────────────────────────────────────────────────── -->
+@if (history().length > 0) {
+  <div class="section-divider">
+    <h2><mat-icon>history</mat-icon> Historique des optimisations</h2>
+  </div>
+  <div class="hs-card history-card">
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th>Poste ciblé</th>
+          <th>Date</th>
+          <th>Avant</th>
+          <th>Après</th>
+          <th>Gain</th>
+          <th>Modèle IA</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (item of history(); track item.id) {
+          <tr>
+            <td class="td-job">
+              <span class="td-job__title">{{ item.jobTitle }}</span>
+              <span class="td-job__company">{{ item.company }}</span>
+            </td>
+            <td>{{ item.createdAt | date:'dd/MM/yyyy' }}</td>
+            <td>
+              <span class="score-chip score-chip--before">{{ item.originalScore }}%</span>
+            </td>
+            <td>
+              <span class="score-chip score-chip--after">{{ item.optimizedScore }}%</span>
+            </td>
+            <td>
+              <span class="gain-chip">+{{ item.optimizedScore - item.originalScore }} pts</span>
+            </td>
+            <td class="td-model">Mistral 7B</td>
+            <td>
+              <a [routerLink]="'/cv/optimize/' + item.id" class="view-link">
+                <mat-icon>open_in_new</mat-icon>
+              </a>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
   </div>
 }

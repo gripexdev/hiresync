@@ -16,6 +16,13 @@ backend/*.log
 application-local.properties
 application-local.yml
 
+# ── Backend secrets (remove the API key from application.yml before committing) ──
+# Reminder: move hiresync.openrouter.api-key to an env var in prod
+backend/src/main/resources/application.yml
+
+# ── CV uploads (binary files, not for git) ────────────────────────────────────
+backend/uploads/
+
 # ── IDEs ──────────────────────────────────────────────────────────────────────
 .idea/
 *.iml

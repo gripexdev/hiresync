@@ -1,29 +1,91 @@
-@if (simulating()) {
-  <!-- AI Loading state -->
+<div class="back-nav">
+  <a routerLink="/cv" class="back-link"><mat-icon>arrow_back</mat-icon> Mon CV</a>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     PROCESSING / LOADING STATE
+════════════════════════════════════════════════════════════════════════════ -->
+@if (status() === 'queued' || status() === 'processing') {
   <div class="ai-loading">
     <div class="ai-loading__card hs-card">
+      <!-- Pulsing icon -->
       <div class="ai-loading__pulse">
-        <div class="ai-pulse-ring"></div>
+        <div class="ai-pulse-ring r1"></div>
+        <div class="ai-pulse-ring r2"></div>
         <div class="ai-pulse-core"><mat-icon>auto_awesome</mat-icon></div>
       </div>
+
       <h2>Notre IA optimise votre CV…</h2>
-      <p>Analyse de l'offre et réécriture des sections pour maximiser votre score ATS</p>
-      <div class="ai-loading__steps">
-        <div class="ai-step ai-step--done"><mat-icon>check</mat-icon> Analyse de l'offre d'emploi</div>
-        <div class="ai-step ai-step--done"><mat-icon>check</mat-icon> Extraction des mots-clés critiques</div>
-        <div class="ai-step ai-step--active"><mat-spinner diameter="14" /> Réécriture des sections du CV…</div>
-        <div class="ai-step"><mat-icon>radio_button_unchecked</mat-icon> Calcul du score ATS final</div>
+      <p>
+        @if (jobTitle()) {
+          Analyse de l'offre "<strong>{{ jobTitle() }}</strong>" et réécriture des sections pour maximiser votre score ATS
+        } @else {
+          Analyse de l'offre et réécriture des sections pour maximiser votre score ATS
+        }
+      </p>
+
+      <!-- Step-by-step progress -->
+      <div class="ai-steps">
+        @for (step of steps(); track step.label) {
+          <div class="ai-step" [ngClass]="'ai-step--' + step.status">
+            @if (step.status === 'done') {
+              <mat-icon class="ai-step__icon ai-step__icon--done">check_circle</mat-icon>
+            } @else if (step.status === 'active') {
+              <mat-spinner diameter="16" class="ai-step__spinner" />
+            } @else {
+              <mat-icon class="ai-step__icon ai-step__icon--pending">radio_button_unchecked</mat-icon>
+            }
+            <span>{{ step.label }}</span>
+          </div>
+        }
       </div>
-      <p class="ai-loading__model">Modèle : <strong>mistralai/mistral-7b-instruct:free</strong> via OpenRouter</p>
+
+      <!-- Transport info -->
+      <div class="ai-transport">
+        <div class="ai-transport__item">
+          <mat-icon>hub</mat-icon>
+          <span>RabbitMQ → CV Optimizer Service</span>
+        </div>
+        <div class="ai-transport__sep">→</div>
+        <div class="ai-transport__item ai-transport__item--model">
+          <mat-icon>psychology</mat-icon>
+          <span>mistralai/mistral-7b-instruct:free</span>
+        </div>
+        <div class="ai-transport__sep">→</div>
+        <div class="ai-transport__item">
+          <mat-icon>notifications_active</mat-icon>
+          <span>WebSocket push</span>
+        </div>
+      </div>
     </div>
   </div>
 }
 
-@if (!simulating()) {
+<!-- ══════════════════════════════════════════════════════════════════════════
+     FAILED STATE
+════════════════════════════════════════════════════════════════════════════ -->
+@if (status() === 'failed') {
+  <div class="error-state">
+    <div class="hs-card error-card">
+      <mat-icon>error_outline</mat-icon>
+      <h2>Optimisation échouée</h2>
+      <p>Une erreur s'est produite. Cela peut arriver si le quota OpenRouter est dépassé. Réessayez dans quelques minutes.</p>
+      <a routerLink="/cv" class="hs-btn-secondary">Retour au CV Manager</a>
+    </div>
+  </div>
+}
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     COMPLETED STATE
+════════════════════════════════════════════════════════════════════════════ -->
+@if (status() === 'completed') {
   @if (result(); as r) {
     <div class="page-header">
       <h1>Résultat de l'optimisation</h1>
-      <p>CV optimisé pour : <strong>{{ r.jobTitle }}</strong></p>
+      <p>CV optimisé pour : <strong>{{ r.jobTitle }}</strong>
+        @if (r.modelUsed) { · <span class="model-badge">{{ r.modelUsed }}</span> }
+        @if (r.processingTimeMs) { · {{ (r.processingTimeMs / 1000).toFixed(1) }}s }
+      </p>
     </div>
 
     <!-- Score comparison -->
@@ -42,10 +104,10 @@
           </svg>
           <div class="score-gauge__label">
             <span class="score-gauge__value" [style.color]="scoreColor(r.originalScore)">{{ r.originalScore }}%</span>
-            <span class="score-gauge__sub">ATS Score</span>
+            <span class="score-gauge__sub">ATS</span>
           </div>
         </div>
-        <div class="score-card__chip score-card__chip--before">Avant optimisation</div>
+        <div class="score-card__chip score-card__chip--before">Avant</div>
       </div>
 
       <div class="score-arrow">
@@ -67,33 +129,34 @@
           </svg>
           <div class="score-gauge__label">
             <span class="score-gauge__value" [style.color]="scoreColor(r.optimizedScore)">{{ r.optimizedScore }}%</span>
-            <span class="score-gauge__sub">ATS Score</span>
+            <span class="score-gauge__sub">ATS</span>
           </div>
         </div>
-        <div class="score-card__chip score-card__chip--after">Après optimisation</div>
+        <div class="score-card__chip score-card__chip--after">Après</div>
       </div>
     </div>
 
-    <!-- Changes + Download -->
+    <!-- Changes + download -->
     <div class="optimizer-grid">
+      <!-- Suggested changes -->
       <div class="hs-card changes-card">
-        <h2><mat-icon>auto_fix_high</mat-icon> Modifications suggérées par l'IA</h2>
+        <h2><mat-icon>auto_fix_high</mat-icon>
+          {{ r.suggestedChanges.length }} modifications apportées par l'IA
+        </h2>
         <div class="changes-list">
           @for (change of r.suggestedChanges; track change.description) {
             <div class="change-item">
               <div class="change-item__icon"
-                [style.background]="changeColors[change.type] + '18'"
-                [style.color]="changeColors[change.type]">
+                   [style.background]="changeColors[change.type] + '18'"
+                   [style.color]="changeColors[change.type]">
                 <mat-icon>{{ changeIcons[change.type] }}</mat-icon>
               </div>
               <div class="change-item__body">
-                <div class="change-item__header">
-                  <span class="change-item__type"
-                    [style.background]="changeColors[change.type] + '18'"
-                    [style.color]="changeColors[change.type]">
-                    {{ changeLabel(change.type) }}
-                  </span>
-                </div>
+                <span class="change-item__type"
+                      [style.background]="changeColors[change.type] + '18'"
+                      [style.color]="changeColors[change.type]">
+                  {{ changeLabel(change.type) }}
+                </span>
                 <p class="change-item__desc">{{ change.description }}</p>
                 @if (change.before && change.after) {
                   <div class="change-diff">
@@ -107,22 +170,58 @@
         </div>
       </div>
 
-      <div class="optimizer-actions">
-        <div class="hs-card actions-card">
+      <!-- Right sidebar -->
+      <div class="optimizer-sidebar">
+        <!-- Download -->
+        <div class="hs-card sidebar-action-card">
           <h3><mat-icon>download</mat-icon> Télécharger</h3>
           <p>Votre CV optimisé est prêt. Téléchargez-le en PDF et utilisez-le pour vos candidatures.</p>
-          <a [href]="r.optimizedCvUrl" download class="hs-btn-primary download-btn">
+          <a [href]="r.optimizedCvUrl" download class="hs-btn-primary dl-btn">
             <mat-icon>download</mat-icon> Télécharger le CV optimisé
           </a>
-          <a routerLink="/jobs" class="hs-btn-secondary download-btn" style="margin-top:8px">
+          <a routerLink="/jobs" class="hs-btn-secondary dl-btn">
             <mat-icon>work_outline</mat-icon> Voir les offres compatibles
+          </a>
+          <a routerLink="/cv" class="hs-btn-secondary dl-btn">
+            <mat-icon>arrow_back</mat-icon> Retour au CV Manager
           </a>
         </div>
 
+        <!-- AI info -->
+        <div class="hs-card ai-info-card">
+          <div class="ai-info-card__icon"><mat-icon>psychology</mat-icon></div>
+          <h3>Traitement IA</h3>
+          <div class="ai-info-rows">
+            <div class="ai-info-row">
+              <span>Modèle</span>
+              <span class="mono">{{ r.modelUsed ?? 'Mistral 7B' }}</span>
+            </div>
+            @if (r.processingTimeMs) {
+              <div class="ai-info-row">
+                <span>Durée</span>
+                <span>{{ (r.processingTimeMs / 1000).toFixed(1) }}s</span>
+              </div>
+            }
+            <div class="ai-info-row">
+              <span>Transport</span>
+              <span>RabbitMQ async</span>
+            </div>
+            <div class="ai-info-row">
+              <span>Notification</span>
+              <span>WebSocket STOMP</span>
+            </div>
+            <div class="ai-info-row">
+              <span>Modifications</span>
+              <span>{{ r.suggestedChanges.length }} apportées</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tip -->
         <div class="hs-card tip-card">
           <div class="tip-card__icon"><mat-icon>lightbulb</mat-icon></div>
-          <h3>Conseil IA</h3>
-          <p>Votre CV est maintenant optimisé pour passer les filtres ATS. Pensez à personnaliser votre lettre de motivation pour chaque candidature.</p>
+          <h3>Conseil</h3>
+          <p>Ce CV est optimisé pour <strong>{{ r.jobTitle }}</strong>. Créez une version différente pour chaque candidature importante.</p>
         </div>
       </div>
     </div>

@@ -1,0 +1,57 @@
+<div class="dialog-header">
+  <div class="dialog-header__icon"><mat-icon>auto_awesome</mat-icon></div>
+  <div>
+    <h2>Optimiser mon CV pour une offre</h2>
+    <p>Choisissez le poste pour lequel vous voulez optimiser votre CV</p>
+  </div>
+  <button class="dialog-close" (click)="cancel()"><mat-icon>close</mat-icon></button>
+</div>
+
+<!-- Search -->
+<div class="dialog-search">
+  <mat-form-field appearance="outline">
+    <mat-label>Rechercher une offre</mat-label>
+    <mat-icon matPrefix>search</mat-icon>
+    <input matInput [formControl]="search" placeholder="Titre, entreprise…" />
+  </mat-form-field>
+</div>
+
+<!-- Job list -->
+<div class="dialog-jobs">
+  @if (loading()) {
+    <div class="dialog-loading"><mat-spinner diameter="32" /></div>
+  } @else {
+    @for (job of jobs(); track job.id) {
+      <div class="job-option"
+           [class.job-option--selected]="selected()?.id === job.id"
+           (click)="select(job)">
+        <img [src]="job.logoUrl" [alt]="job.company" class="job-option__logo" />
+        <div class="job-option__info">
+          <span class="job-option__title">{{ job.title }}</span>
+          <span class="job-option__meta">{{ job.company }} · {{ job.location }} · {{ job.contractType }}</span>
+        </div>
+        @if (job.matchScore) {
+          <span class="job-option__match" [ngClass]="matchClass(job.matchScore)">{{ job.matchScore }}%</span>
+        }
+        @if (selected()?.id === job.id) {
+          <mat-icon class="job-option__check">check_circle</mat-icon>
+        }
+      </div>
+    }
+    @if (jobs().length === 0) {
+      <div class="dialog-empty">
+        <mat-icon>search_off</mat-icon>
+        <span>Aucune offre trouvée</span>
+      </div>
+    }
+  }
+</div>
+
+<!-- Actions -->
+<div class="dialog-actions">
+  <button class="hs-btn-secondary" (click)="cancel()">Annuler</button>
+  <button class="hs-btn-accent" [disabled]="!selected()" (click)="confirm()">
+    <mat-icon>auto_awesome</mat-icon>
+    Optimiser avec l'IA
+  </button>
+</div>

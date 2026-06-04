@@ -1,11 +1,19 @@
-import { Component, inject, OnInit, signal, Input } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy, signal, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterModule } from '@angular/router';
+import { RouterModule, ActivatedRoute } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { Subject, takeUntil, timeout, catchError, of } from 'rxjs';
 import { CvService } from '../../../core/services/cv.service';
-import { CVOptimizationResult, SuggestedChange } from '../../../core/models/cv.model';
+import { WebSocketService } from '../../../core/services/websocket.service';
+import { CVOptimizationResult, OptimizationStatus } from '../../../core/models/cv.model';
+
+/** Processing step shown in the loading screen */
+interface ProcessStep {
+  label: string;
+  status: 'done' | 'active' | 'pending';
+}
 
 @Component({
   selector: 'app-cv-optimizer',
@@ -14,14 +22,32 @@ import { CVOptimizationResult, SuggestedChange } from '../../../core/models/cv.m
   templateUrl: './cv-optimizer.component.html',
   styleUrls: ['./cv-optimizer.component.scss'],
 })
-export class CvOptimizerComponent implements OnInit {
-  @Input() id!: string;
+export class CvOptimizerComponent implements OnInit, OnDestroy {
+  @Input() id!: string;    // optimizationId from route param
 
-  private svc = inject(CvService);
+  private cvSvc    = inject(CvService);
+  private wsSvc    = inject(WebSocketService);
+  private route    = inject(ActivatedRoute);
+  private destroy$ = new Subject<void>();
+  private cancel$  = new Subject<void>();
 
-  result   = signal<CVOptimizationResult | null>(null);
-  loading  = signal(true);
-  simulating = signal(false);
+  // ── State ────────────────────────────────────────────────────────────────────
+  result    = signal<CVOptimizationResult | null>(null);
+  status    = signal<OptimizationStatus>('queued');
+  steps     = signal<ProcessStep[]>([
+    { label: 'Analyse de l\'offre d\'emploi',               status: 'pending' },
+    { label: 'Extraction des mots-clés ATS critiques',      status: 'pending' },
+    { label: 'Réécriture des sections par LLM (Mistral 7B)', status: 'pending' },
+    { label: 'Calcul du score ATS final',                   status: 'pending' },
+  ]);
+
+  // Query params passed from cv-manager when launching a new optimization
+  jobTitle = signal('');
+  jobId    = signal('');
+  cvId     = signal('');
+
+  // ── Config ───────────────────────────────────────────────────────────────────
+  readonly circumference = 2 * Math.PI * 52;
 
   readonly changeIcons: Record<string, string> = {
     keyword_added:    'add_circle',
@@ -36,25 +62,87 @@ export class CvOptimizerComponent implements OnInit {
     skill_added:      '#F59E0B',
   };
 
-  circumference = 2 * Math.PI * 52;
+  // ── Lifecycle ────────────────────────────────────────────────────────────────
+  ngOnInit(): void {
+    // Grab context from query params (set by cv-manager when triggering a new job)
+    const q = this.route.snapshot.queryParams;
+    this.jobTitle.set(q['jobTitle'] ?? '');
+    this.jobId.set(q['jobId'] ?? '');
+    this.cvId.set(q['cvId'] ?? '');
+
+    this._startProcessing();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+    this.cancel$.next();
+    this.cancel$.complete();
+  }
+
+  // ── Processing flow ───────────────────────────────────────────────────────────
+  private _startProcessing(): void {
+    this.status.set('processing');
+    this._animateSteps();
+
+    // 1. Connect WebSocket and subscribe to cv-optimization topic
+    this.wsSvc.connect();
+    this.wsSvc.cvOptimization$.pipe(
+      takeUntil(this.destroy$),
+    ).subscribe(event => {
+      if (event.optimizationId !== this.id) return;   // not our job
+      if (event.status === 'completed') {
+        this.cancel$.next();   // stop polling
+        this._loadResult();
+      } else if (event.status === 'failed') {
+        this.cancel$.next();
+        this.status.set('failed');
+      }
+    });
+
+    // 2. Polling fallback — fires every 3s; WebSocket cancel$ stops it when WS arrives
+    this.cvSvc.pollUntilDone(this.id, this.cancel$)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(r => {
+        if (r.status === 'completed') this._loadResult();
+        else if (r.status === 'failed') this.status.set('failed');
+      });
+  }
+
+  private _loadResult(): void {
+    this.status.set('completed');
+    this._markAllStepsDone();
+    this.cvSvc.getOptimizationResult(this.id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(r => this.result.set(r));
+  }
+
+  // ── Step animation (simulates server progress in the UI) ─────────────────────
+  private _animateSteps(): void {
+    const delays = [600, 1800, 4000, 7500];
+    delays.forEach((delay, i) => {
+      setTimeout(() => {
+        this.steps.update(s => s.map((step, j) => ({
+          ...step,
+          status: j < i  ? 'done'
+               : j === i ? 'active'
+               : 'pending',
+        })));
+      }, delay);
+    });
+  }
+
+  private _markAllStepsDone(): void {
+    this.steps.update(s => s.map(step => ({ ...step, status: 'done' as const })));
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
   dashOffset(score: number): number { return this.circumference * (1 - score / 100); }
 
   scoreColor(score: number): string {
     if (score >= 80) return '#10B981';
     if (score >= 60) return '#F59E0B';
     return '#EF4444';
-  }
-
-  ngOnInit(): void {
-    // Simulate "AI processing" for 2s then show result
-    this.simulating.set(true);
-    setTimeout(() => {
-      this.svc.getOptimizationResult(this.id).subscribe(r => {
-        this.result.set(r);
-        this.loading.set(false);
-        this.simulating.set(false);
-      });
-    }, 2000);
   }
 
   changeLabel(type: string): string {
