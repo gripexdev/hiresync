@@ -1,0 +1,125 @@
+<!-- Welcome header -->
+<div class="page-header">
+  <div class="dash-welcome">
+    @if (auth.user(); as user) {
+      <img [src]="user.avatarUrl" [alt]="user.fullName" class="dash-welcome__avatar" />
+      <div>
+        <h1>Bonjour, {{ user.fullName.split(' ')[0] }} 👋</h1>
+        <p>Voici un aperçu de votre recherche d'emploi</p>
+      </div>
+    }
+  </div>
+</div>
+
+<!-- Stats cards -->
+@if (stats(); as s) {
+  <div class="dash-stats">
+    <div class="stat-card stat-card--primary">
+      <div class="stat-card__icon"><mat-icon>send</mat-icon></div>
+      <div class="stat-card__body">
+        <span class="stat-card__value">{{ s.total }}</span>
+        <span class="stat-card__label">Candidatures totales</span>
+      </div>
+    </div>
+    <div class="stat-card stat-card--warning">
+      <div class="stat-card__icon"><mat-icon>hourglass_empty</mat-icon></div>
+      <div class="stat-card__body">
+        <span class="stat-card__value">{{ s.pending }}</span>
+        <span class="stat-card__label">En attente</span>
+      </div>
+    </div>
+    <div class="stat-card stat-card--success">
+      <div class="stat-card__icon"><mat-icon>calendar_today</mat-icon></div>
+      <div class="stat-card__body">
+        <span class="stat-card__value">{{ s.interviews }}</span>
+        <span class="stat-card__label">Entretiens</span>
+      </div>
+    </div>
+    <div class="stat-card stat-card--accent">
+      <div class="stat-card__icon"><mat-icon>auto_awesome</mat-icon></div>
+      <div class="stat-card__body">
+        <span class="stat-card__value">88%</span>
+        <span class="stat-card__label">Score ATS du CV</span>
+      </div>
+    </div>
+  </div>
+}
+
+<div class="dash-grid">
+  <!-- Recent applications -->
+  <div class="hs-card dash-card">
+    <div class="dash-card__header">
+      <h2><mat-icon>track_changes</mat-icon> Candidatures récentes</h2>
+      <a routerLink="/applications" class="dash-card__link">Voir tout</a>
+    </div>
+
+    @if (loading()) {
+      <div class="dash-skeleton">
+        @for (i of [1,2,3,4,5]; track i) {
+          <div class="skeleton" style="height:52px;margin-bottom:8px;border-radius:8px"></div>
+        }
+      </div>
+    } @else {
+      <div class="app-list">
+        @for (app of applications(); track app.id) {
+          <div class="app-row" [routerLink]="'/jobs/' + app.jobId">
+            <div class="app-row__info">
+              <span class="app-row__title">{{ app.jobTitle }}</span>
+              <span class="app-row__company">{{ app.company }} · {{ app.location }}</span>
+            </div>
+            <div class="app-row__meta">
+              <app-status-badge [status]="app.status" />
+              @if (app.matchScore) {
+                <span class="match-chip" [class.match-chip--high]="app.matchScore >= 80">
+                  {{ app.matchScore }}%
+                </span>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="dash-side">
+    <!-- Quick actions -->
+    <div class="hs-card dash-card">
+      <div class="dash-card__header">
+        <h2><mat-icon>bolt</mat-icon> Actions rapides</h2>
+      </div>
+      <div class="quick-actions">
+        @for (action of quickActions; track action.label) {
+          <a [routerLink]="action.route" class="quick-action">
+            <div class="quick-action__icon" [style.background]="action.color + '18'" [style.color]="action.color">
+              <mat-icon>{{ action.icon }}</mat-icon>
+            </div>
+            <span>{{ action.label }}</span>
+            <mat-icon class="quick-action__arrow">chevron_right</mat-icon>
+          </a>
+        }
+      </div>
+    </div>
+
+    <!-- Notifications -->
+    <div class="hs-card dash-card">
+      <div class="dash-card__header">
+        <h2><mat-icon>notifications</mat-icon> Notifications</h2>
+        <a routerLink="/notifications" class="dash-card__link">Voir tout</a>
+      </div>
+      <div class="notif-list">
+        @for (n of notifications(); track n.id) {
+          <a [routerLink]="n.link ?? '/notifications'" class="notif-item" [class.notif-item--unread]="!n.read">
+            <div class="notif-item__icon">
+              <mat-icon>{{ notifIcons[n.type] ?? 'notifications' }}</mat-icon>
+            </div>
+            <div class="notif-item__body">
+              <span class="notif-item__title">{{ n.title }}</span>
+              <span class="notif-item__msg">{{ n.message }}</span>
+            </div>
+            @if (!n.read) { <div class="notif-item__dot"></div> }
+          </a>
+        }
+      </div>
+    </div>
+  </div>
+</div>

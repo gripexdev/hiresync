@@ -1,0 +1,66 @@
+<div class="page-header">
+  <div class="notif-page-header">
+    <div>
+      <h1>Notifications</h1>
+      <p>{{ unreadCount }} non lue(s)</p>
+    </div>
+    @if (unreadCount > 0) {
+      <button class="hs-btn-secondary mark-all-btn" (click)="markAllRead()">
+        <mat-icon>done_all</mat-icon> Tout marquer comme lu
+      </button>
+    }
+  </div>
+</div>
+
+<div class="hs-card notif-card">
+  @if (loading()) {
+    <div class="loading-center">
+      @for (i of [1,2,3,4,5]; track i) {
+        <div class="skeleton notif-skeleton"></div>
+      }
+    </div>
+  } @else if (notifications().length === 0) {
+    <div class="empty-state">
+      <mat-icon>notifications_none</mat-icon>
+      <h3>Aucune notification</h3>
+      <p>Vous serez notifié lorsque des offres correspondront à votre profil ou que vos candidatures évolueront.</p>
+    </div>
+  } @else {
+    <div class="notif-list">
+      @for (n of notifications(); track n.id) {
+        <a class="notif-item"
+           [class.notif-item--unread]="!n.read"
+           [routerLink]="n.link ?? '/notifications'"
+           (click)="markRead(n)">
+          <!-- Icon -->
+          <div class="notif-item__icon-wrap"
+               [style.background]="iconColors[n.type] + '18'"
+               [style.color]="iconColors[n.type]">
+            <mat-icon>{{ icons[n.type] ?? 'notifications' }}</mat-icon>
+          </div>
+
+          <!-- Body -->
+          <div class="notif-item__body">
+            <div class="notif-item__top">
+              <span class="notif-item__type-badge"
+                    [style.background]="iconColors[n.type] + '18'"
+                    [style.color]="iconColors[n.type]">
+                {{ typeLabels[n.type] }}
+              </span>
+              <span class="notif-item__time">{{ timeAgo(n.createdAt) }}</span>
+            </div>
+            <span class="notif-item__title">{{ n.title }}</span>
+            <p class="notif-item__msg">{{ n.message }}</p>
+          </div>
+
+          <!-- Unread dot -->
+          @if (!n.read) {
+            <div class="notif-item__dot"></div>
+          } @else {
+            <mat-icon class="notif-item__read-icon">check_circle</mat-icon>
+          }
+        </a>
+      }
+    </div>
+  }
+</div>

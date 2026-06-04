@@ -1,0 +1,130 @@
+@if (simulating()) {
+  <!-- AI Loading state -->
+  <div class="ai-loading">
+    <div class="ai-loading__card hs-card">
+      <div class="ai-loading__pulse">
+        <div class="ai-pulse-ring"></div>
+        <div class="ai-pulse-core"><mat-icon>auto_awesome</mat-icon></div>
+      </div>
+      <h2>Notre IA optimise votre CV…</h2>
+      <p>Analyse de l'offre et réécriture des sections pour maximiser votre score ATS</p>
+      <div class="ai-loading__steps">
+        <div class="ai-step ai-step--done"><mat-icon>check</mat-icon> Analyse de l'offre d'emploi</div>
+        <div class="ai-step ai-step--done"><mat-icon>check</mat-icon> Extraction des mots-clés critiques</div>
+        <div class="ai-step ai-step--active"><mat-spinner diameter="14" /> Réécriture des sections du CV…</div>
+        <div class="ai-step"><mat-icon>radio_button_unchecked</mat-icon> Calcul du score ATS final</div>
+      </div>
+      <p class="ai-loading__model">Modèle : <strong>mistralai/mistral-7b-instruct:free</strong> via OpenRouter</p>
+    </div>
+  </div>
+}
+
+@if (!simulating()) {
+  @if (result(); as r) {
+    <div class="page-header">
+      <h1>Résultat de l'optimisation</h1>
+      <p>CV optimisé pour : <strong>{{ r.jobTitle }}</strong></p>
+    </div>
+
+    <!-- Score comparison -->
+    <div class="score-comparison">
+      <div class="hs-card score-card score-card--before">
+        <span class="score-card__label">Score original</span>
+        <div class="score-gauge-wrap">
+          <svg viewBox="0 0 120 120" class="score-gauge">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="#E2E8F0" stroke-width="8"/>
+            <circle cx="60" cy="60" r="52" fill="none"
+              [attr.stroke]="scoreColor(r.originalScore)"
+              stroke-width="8" stroke-linecap="round"
+              [attr.stroke-dasharray]="circumference"
+              [attr.stroke-dashoffset]="dashOffset(r.originalScore)"
+              transform="rotate(-90 60 60)"/>
+          </svg>
+          <div class="score-gauge__label">
+            <span class="score-gauge__value" [style.color]="scoreColor(r.originalScore)">{{ r.originalScore }}%</span>
+            <span class="score-gauge__sub">ATS Score</span>
+          </div>
+        </div>
+        <div class="score-card__chip score-card__chip--before">Avant optimisation</div>
+      </div>
+
+      <div class="score-arrow">
+        <mat-icon>trending_up</mat-icon>
+        <span class="score-delta">+{{ r.optimizedScore - r.originalScore }} pts</span>
+      </div>
+
+      <div class="hs-card score-card score-card--after">
+        <span class="score-card__label">Score optimisé</span>
+        <div class="score-gauge-wrap">
+          <svg viewBox="0 0 120 120" class="score-gauge">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="#E2E8F0" stroke-width="8"/>
+            <circle cx="60" cy="60" r="52" fill="none"
+              [attr.stroke]="scoreColor(r.optimizedScore)"
+              stroke-width="8" stroke-linecap="round"
+              [attr.stroke-dasharray]="circumference"
+              [attr.stroke-dashoffset]="dashOffset(r.optimizedScore)"
+              transform="rotate(-90 60 60)"/>
+          </svg>
+          <div class="score-gauge__label">
+            <span class="score-gauge__value" [style.color]="scoreColor(r.optimizedScore)">{{ r.optimizedScore }}%</span>
+            <span class="score-gauge__sub">ATS Score</span>
+          </div>
+        </div>
+        <div class="score-card__chip score-card__chip--after">Après optimisation</div>
+      </div>
+    </div>
+
+    <!-- Changes + Download -->
+    <div class="optimizer-grid">
+      <div class="hs-card changes-card">
+        <h2><mat-icon>auto_fix_high</mat-icon> Modifications suggérées par l'IA</h2>
+        <div class="changes-list">
+          @for (change of r.suggestedChanges; track change.description) {
+            <div class="change-item">
+              <div class="change-item__icon"
+                [style.background]="changeColors[change.type] + '18'"
+                [style.color]="changeColors[change.type]">
+                <mat-icon>{{ changeIcons[change.type] }}</mat-icon>
+              </div>
+              <div class="change-item__body">
+                <div class="change-item__header">
+                  <span class="change-item__type"
+                    [style.background]="changeColors[change.type] + '18'"
+                    [style.color]="changeColors[change.type]">
+                    {{ changeLabel(change.type) }}
+                  </span>
+                </div>
+                <p class="change-item__desc">{{ change.description }}</p>
+                @if (change.before && change.after) {
+                  <div class="change-diff">
+                    <div class="diff-before"><span>Avant :</span> {{ change.before }}</div>
+                    <div class="diff-after"><span>Après :</span> {{ change.after }}</div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="optimizer-actions">
+        <div class="hs-card actions-card">
+          <h3><mat-icon>download</mat-icon> Télécharger</h3>
+          <p>Votre CV optimisé est prêt. Téléchargez-le en PDF et utilisez-le pour vos candidatures.</p>
+          <a [href]="r.optimizedCvUrl" download class="hs-btn-primary download-btn">
+            <mat-icon>download</mat-icon> Télécharger le CV optimisé
+          </a>
+          <a routerLink="/jobs" class="hs-btn-secondary download-btn" style="margin-top:8px">
+            <mat-icon>work_outline</mat-icon> Voir les offres compatibles
+          </a>
+        </div>
+
+        <div class="hs-card tip-card">
+          <div class="tip-card__icon"><mat-icon>lightbulb</mat-icon></div>
+          <h3>Conseil IA</h3>
+          <p>Votre CV est maintenant optimisé pour passer les filtres ATS. Pensez à personnaliser votre lettre de motivation pour chaque candidature.</p>
+        </div>
+      </div>
+    </div>
+  }
+}

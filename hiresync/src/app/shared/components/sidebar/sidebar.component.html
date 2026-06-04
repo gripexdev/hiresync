@@ -1,0 +1,54 @@
+<aside class="sidebar" [class.sidebar--collapsed]="collapsed">
+  <!-- Logo -->
+  <div class="sidebar__logo">
+    <div class="sidebar__logo-icon">
+      <mat-icon>hub</mat-icon>
+    </div>
+    @if (!collapsed) {
+      <span class="sidebar__logo-text">HireSync</span>
+    }
+    <button class="sidebar__toggle" (click)="toggleCollapse.emit()" [matTooltip]="collapsed ? 'Expand' : 'Collapse'">
+      <mat-icon>{{ collapsed ? 'chevron_right' : 'chevron_left' }}</mat-icon>
+    </button>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="sidebar__nav">
+    @for (item of navItems; track item.route) {
+      <a class="sidebar__item"
+         [class.sidebar__item--active]="isActive(item.route, item.exact)"
+         [routerLink]="item.route"
+         [matTooltip]="collapsed ? item.label : ''"
+         matTooltipPosition="right">
+        <span class="sidebar__item-icon">
+          <mat-icon>{{ item.icon }}</mat-icon>
+          @if (item.route === '/notifications' && notifs.unreadCount() > 0) {
+            <span class="sidebar__badge">{{ notifs.unreadCount() }}</span>
+          }
+        </span>
+        @if (!collapsed) {
+          <span class="sidebar__item-label">{{ item.label }}</span>
+        }
+      </a>
+    }
+  </nav>
+
+  <!-- User Profile -->
+  <div class="sidebar__footer">
+    @if (auth.user(); as user) {
+      <div class="sidebar__user" [matTooltip]="collapsed ? user.fullName : ''" matTooltipPosition="right">
+        <img class="sidebar__avatar" [src]="user.avatarUrl" [alt]="user.fullName" />
+        @if (!collapsed) {
+          <div class="sidebar__user-info">
+            <span class="sidebar__user-name">{{ user.fullName }}</span>
+            <span class="sidebar__user-email">{{ user.email }}</span>
+          </div>
+        }
+      </div>
+      <button class="sidebar__logout" (click)="logout()" [matTooltip]="'Déconnexion'" matTooltipPosition="right">
+        <mat-icon>logout</mat-icon>
+        @if (!collapsed) { <span>Déconnexion</span> }
+      </button>
+    }
+  </div>
+</aside>

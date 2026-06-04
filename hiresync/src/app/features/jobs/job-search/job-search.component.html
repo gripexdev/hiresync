@@ -1,0 +1,110 @@
+<div class="page-header">
+  <h1>Offres d'emploi</h1>
+  <p>{{ total() }} offres trouvées sur le marché marocain</p>
+</div>
+
+<div class="job-layout">
+  <!-- Filter sidebar -->
+  <aside class="filter-sidebar hs-card">
+    <div class="filter-sidebar__header">
+      <span><mat-icon>tune</mat-icon> Filtres</span>
+      <button class="clear-btn" (click)="clearFilters()" type="button">Réinitialiser</button>
+    </div>
+
+    <form [formGroup]="filters" class="filter-form">
+      <mat-form-field appearance="outline">
+        <mat-label>Mot-clé</mat-label>
+        <mat-icon matPrefix>search</mat-icon>
+        <input matInput formControlName="q" placeholder="Titre, entreprise…" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Ville</mat-label>
+        <mat-icon matPrefix>location_on</mat-icon>
+        <input matInput formControlName="location" placeholder="Casablanca, Rabat…" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Type de contrat</mat-label>
+        <mat-select formControlName="contractType">
+          <mat-option [value]="null">Tous</mat-option>
+          @for (t of contractTypes; track t) {
+            <mat-option [value]="t">{{ t }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Secteur</mat-label>
+        <mat-select formControlName="sector">
+          <mat-option [value]="null">Tous</mat-option>
+          @for (s of sectors; track s) {
+            <mat-option [value]="s">{{ s }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Niveau d'expérience</mat-label>
+        <mat-select formControlName="experienceLevel">
+          <mat-option [value]="null">Tous</mat-option>
+          @for (lvl of experienceLevels; track lvl) {
+            <mat-option [value]="lvl">{{ lvl }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    </form>
+  </aside>
+
+  <!-- Jobs list -->
+  <div class="job-results">
+    @if (loading()) {
+      <div class="loading-center">
+        <mat-spinner diameter="40" />
+        <p>Recherche des offres…</p>
+      </div>
+    } @else if (jobs().length === 0) {
+      <div class="empty-state">
+        <mat-icon>search_off</mat-icon>
+        <h3>Aucune offre trouvée</h3>
+        <p>Essayez d'autres mots-clés ou réinitialisez les filtres</p>
+        <button class="hs-btn-primary" (click)="clearFilters()">Réinitialiser</button>
+      </div>
+    } @else {
+      @for (job of jobs(); track job.id) {
+        <div class="job-card hs-card" [routerLink]="'/jobs/' + job.id">
+          <div class="job-card__header">
+            <img [src]="job.logoUrl" [alt]="job.company" class="job-card__logo" />
+            <div class="job-card__main">
+              <h3 class="job-card__title">{{ job.title }}</h3>
+              <span class="job-card__company">{{ job.company }}</span>
+            </div>
+            @if (job.matchScore) {
+              <div class="job-card__match" [ngClass]="matchClass(job.matchScore)">
+                <mat-icon>hub</mat-icon>
+                {{ job.matchScore }}%
+              </div>
+            }
+          </div>
+
+          <div class="job-card__tags">
+            <span class="tag tag--location"><mat-icon>location_on</mat-icon>{{ job.location }}</span>
+            <span class="tag tag--contract">{{ job.contractType }}</span>
+            <span class="tag tag--level">{{ job.experienceLevel }}</span>
+            @if (job.salary) { <span class="tag tag--salary">{{ job.salary }}</span> }
+          </div>
+
+          <p class="job-card__desc">{{ job.description | slice:0:160 }}…</p>
+
+          <div class="job-card__footer">
+            <span class="job-card__date"><mat-icon>schedule</mat-icon>{{ timeAgo(job.postedAt) }}</span>
+            <span class="job-card__source">via {{ job.source }}</span>
+            <button class="hs-btn-primary job-card__cta" (click)="$event.stopPropagation()">
+              <mat-icon>open_in_new</mat-icon> Voir l'offre
+            </button>
+          </div>
+        </div>
+      }
+    }
+  </div>
+</div>

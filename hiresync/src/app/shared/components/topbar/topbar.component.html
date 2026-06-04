@@ -1,0 +1,53 @@
+<header class="topbar">
+  <div class="topbar__left">
+    @if (showMenuToggle) {
+      <button class="topbar__menu-btn" (click)="menuToggle.emit()">
+        <mat-icon>menu</mat-icon>
+      </button>
+    }
+    <h1 class="topbar__title">{{ title }}</h1>
+  </div>
+
+  <div class="topbar__right">
+    <!-- Notifications -->
+    <a routerLink="/notifications" class="topbar__icon-btn"
+       [class.topbar__icon-btn--badge]="notifs.unreadCount() > 0">
+      <mat-icon>notifications_none</mat-icon>
+      @if (notifs.unreadCount() > 0) {
+        <span class="topbar__badge">{{ notifs.unreadCount() }}</span>
+      }
+    </a>
+
+    <!-- User menu -->
+    @if (auth.user(); as user) {
+      <button class="topbar__user" [matMenuTriggerFor]="userMenu">
+        <img [src]="user.avatarUrl" [alt]="user.fullName" class="topbar__avatar" />
+        <span class="topbar__user-name">{{ user.fullName.split(' ')[0] }}</span>
+        <mat-icon class="topbar__chevron">expand_more</mat-icon>
+      </button>
+    }
+
+    <mat-menu #userMenu="matMenu" xPosition="before">
+      @if (auth.user(); as user) {
+        <div class="user-menu-header">
+          <img [src]="user.avatarUrl" [alt]="user.fullName" class="user-menu-avatar" />
+          <div>
+            <p class="user-menu-name">{{ user.fullName }}</p>
+            <p class="user-menu-email">{{ user.email }}</p>
+          </div>
+        </div>
+        <mat-divider></mat-divider>
+      }
+      <button mat-menu-item routerLink="/dashboard">
+        <mat-icon>dashboard</mat-icon> Tableau de bord
+      </button>
+      <button mat-menu-item routerLink="/cv">
+        <mat-icon>description</mat-icon> Mon CV
+      </button>
+      <mat-divider></mat-divider>
+      <button mat-menu-item (click)="auth.logout()" class="logout-item">
+        <mat-icon>logout</mat-icon> Déconnexion
+      </button>
+    </mat-menu>
+  </div>
+</header>

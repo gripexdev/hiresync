@@ -1,0 +1,333 @@
+@use '@angular/material' as mat;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+// ── Google Font ──────────────────────────────────────────────────────────────
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+// ── Angular Material Custom Theme ────────────────────────────────────────────
+$primary-palette: mat.m2-define-palette((
+  50:   #e8f4f8,
+  100:  #c5e3ef,
+  200:  #9fd0e5,
+  300:  #78bddb,
+  400:  #59afd5,
+  500:  #2E86AB,
+  600:  #2677a0,
+  700:  #1d6491,
+  800:  #145283,
+  900:  #0a3564,
+  A100: #78d5ff,
+  A200: #45c8ff,
+  A400: #12bbff,
+  A700: #00b4f7,
+  contrast: (
+    50: rgba(0,0,0,.87), 100: rgba(0,0,0,.87), 200: rgba(0,0,0,.87),
+    300: rgba(0,0,0,.87), 400: rgba(0,0,0,.87), 500: white,
+    600: white, 700: white, 800: white, 900: white,
+    A100: rgba(0,0,0,.87), A200: rgba(0,0,0,.87), A400: rgba(0,0,0,.87), A700: white,
+  )
+), 500, 300, 700);
+
+$accent-palette: mat.m2-define-palette((
+  50:   #e3f5f2,
+  100:  #b8e6de,
+  200:  #89d6c8,
+  300:  #59c5b2,
+  400:  #35b8a1,
+  500:  #17A589,
+  600:  #13977c,
+  700:  #0f856c,
+  800:  #0b745e,
+  900:  #065444,
+  A100: #6effdb,
+  A200: #3bffce,
+  A400: #08ffc1,
+  A700: #00f5b7,
+  contrast: (
+    50: rgba(0,0,0,.87), 100: rgba(0,0,0,.87), 200: rgba(0,0,0,.87),
+    300: rgba(0,0,0,.87), 400: rgba(0,0,0,.87), 500: white,
+    600: white, 700: white, 800: white, 900: white,
+    A100: rgba(0,0,0,.87), A200: rgba(0,0,0,.87), A400: rgba(0,0,0,.87), A700: rgba(0,0,0,.87),
+  )
+), 500, 300, 700);
+
+$warn-palette: mat.m2-define-palette(mat.$m2-red-palette);
+
+$hiresync-theme: mat.m2-define-light-theme((
+  color: (
+    primary: $primary-palette,
+    accent:  $accent-palette,
+    warn:    $warn-palette,
+  ),
+  typography: mat.m2-define-typography-config(
+    $font-family: 'Inter, Roboto, system-ui, sans-serif',
+  ),
+  density: 0,
+));
+
+@include mat.all-component-themes($hiresync-theme);
+
+// ── Base Resets ───────────────────────────────────────────────────────────────
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: 'Inter', Roboto, system-ui, sans-serif;
+  background-color: #F8FAFC;
+  color: #1A202C;
+  -webkit-font-smoothing: antialiased;
+}
+
+// ── Utility Classes ───────────────────────────────────────────────────────────
+.hs-card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px -1px rgba(0,0,0,.05);
+  transition: box-shadow 0.2s ease;
+
+  &:hover { box-shadow: 0 10px 25px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.07); }
+}
+
+.hs-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #2E86AB;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+
+  &:hover { background: #2677a0; transform: translateY(-1px); }
+  &:active { transform: translateY(0); }
+}
+
+.hs-btn-secondary {
+  @extend .hs-btn-primary;
+  background: transparent;
+  color: #2E86AB;
+  border: 1.5px solid #2E86AB;
+
+  &:hover { background: #e8f4f8; }
+}
+
+.hs-btn-accent {
+  @extend .hs-btn-primary;
+  background: #17A589;
+  &:hover { background: #13977c; }
+}
+
+.hs-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+
+  &--applied    { background: #dbeafe; color: #1d4ed8; }
+  &--pending    { background: #fef3c7; color: #b45309; }
+  &--interview  { background: #d1fae5; color: #065f46; }
+  &--offer      { background: #ede9fe; color: #5b21b6; }
+  &--rejected   { background: #fee2e2; color: #b91c1c; }
+  &--match-high { background: #d1fae5; color: #065f46; }
+  &--match-med  { background: #fef3c7; color: #b45309; }
+  &--match-low  { background: #fee2e2; color: #b91c1c; }
+}
+
+// ── Angular Material Overrides ────────────────────────────────────────────────
+.mat-mdc-form-field {
+  width: 100%;
+
+  .mdc-text-field {
+    border-radius: 8px !important;
+  }
+}
+
+// ── Fix: Tailwind Preflight vs Material outline fields ────────────────────────
+// Tailwind's Preflight sets `border-style: solid` on every element (`*`).
+// Material then applies `border-width: 1px` (the 4-side shorthand) to the outline
+// notch pieces — so the normally-borderless left/right edges of the notch render
+// as a stray vertical line through each field. The notch should only carry the
+// top/bottom borders; the field's outer edges come from the leading/trailing
+// pieces. Restore that geometry by neutralising the unwanted side styles.
+.mdc-notched-outline__leading  { border-right-style: none; }
+.mdc-notched-outline__notch    { border-left-style: none; border-right-style: none; }
+.mdc-notched-outline__trailing { border-left-style: none; }
+
+[dir='rtl'] {
+  .mdc-notched-outline__leading  { border-right-style: solid; border-left-style: none; }
+  .mdc-notched-outline__trailing { border-left-style: solid; border-right-style: none; }
+}
+
+.mat-mdc-card {
+  border-radius: 12px !important;
+  border: 1px solid #E2E8F0 !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,.07) !important;
+}
+
+.mat-drawer {
+  border-right: 1px solid #E2E8F0 !important;
+}
+
+.mat-mdc-menu-panel {
+  border-radius: 10px !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,.12) !important;
+}
+
+.mat-mdc-snack-bar-container {
+  border-radius: 10px !important;
+}
+
+// ── Scrollbar Styling ─────────────────────────────────────────────────────────
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #F1F5F9; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+// ── ATS Score Gauge ───────────────────────────────────────────────────────────
+.ats-gauge-wrap {
+  position: relative;
+  width: 160px;
+  height: 160px;
+
+  svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+
+  .ats-score-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    .score-value {
+      font-size: 32px;
+      font-weight: 800;
+      color: #1B4F72;
+      line-height: 1;
+    }
+
+    .score-caption {
+      font-size: 11px;
+      color: #64748B;
+      margin-top: 4px;
+    }
+  }
+}
+
+// ── Kanban Board ─────────────────────────────────────────────────────────────
+.kanban-board {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 16px;
+
+  .kanban-column {
+    min-width: 240px;
+    width: 240px;
+    background: #F1F5F9;
+    border-radius: 12px;
+    padding: 12px;
+
+    .column-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+
+      h3 { font-size: 13px; font-weight: 600; color: #475569; margin: 0; }
+      .count {
+        background: #CBD5E1;
+        color: #475569;
+        border-radius: 9999px;
+        padding: 1px 8px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+    }
+
+    .kanban-card {
+      background: #fff;
+      border-radius: 8px;
+      border: 1px solid #E2E8F0;
+      padding: 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: box-shadow 0.2s, transform 0.2s;
+
+      &:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,.1);
+        transform: translateY(-1px);
+      }
+
+      .job-title { font-size: 13px; font-weight: 600; color: #1A202C; }
+      .company   { font-size: 12px; color: #64748B; margin-top: 2px; }
+      .date      { font-size: 11px; color: #94A3B8; margin-top: 8px; }
+    }
+  }
+}
+
+// ── Page Header ───────────────────────────────────────────────────────────────
+.page-header {
+  margin-bottom: 28px;
+
+  h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1A202C;
+    margin: 0 0 4px;
+  }
+
+  p {
+    font-size: 14px;
+    color: #64748B;
+    margin: 0;
+  }
+}
+
+// ── Loading Skeleton ─────────────────────────────────────────────────────────
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #E2E8F0 25%, #F1F5F9 50%, #E2E8F0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+}
+
+// ── Responsive Layout ─────────────────────────────────────────────────────────
+.app-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  .page-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 32px;
+
+    @media (max-width: 768px) {
+      padding: 16px;
+    }
+  }
+}

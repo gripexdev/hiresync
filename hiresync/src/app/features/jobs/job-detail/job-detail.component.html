@@ -1,0 +1,129 @@
+<div class="back-nav">
+  <a routerLink="/jobs" class="back-link"><mat-icon>arrow_back</mat-icon> Retour aux offres</a>
+</div>
+
+@if (loading()) {
+  <div class="loading-center"><mat-spinner diameter="48" /></div>
+}
+
+@if (!loading()) {
+  @if (job(); as job) {
+    <div class="detail-layout">
+      <!-- Main content -->
+      <div class="detail-main">
+        <!-- Header card -->
+        <div class="hs-card detail-header">
+          <div class="detail-header__top">
+            <img [src]="job.logoUrl" [alt]="job.company" class="detail-header__logo" />
+            <div class="detail-header__info">
+              <h1>{{ job.title }}</h1>
+              <div class="detail-header__meta">
+                <span><mat-icon>business</mat-icon>{{ job.company }}</span>
+                <span><mat-icon>location_on</mat-icon>{{ job.location }}</span>
+                <span><mat-icon>work</mat-icon>{{ job.contractType }}</span>
+                @if (job.salary) { <span><mat-icon>payments</mat-icon>{{ job.salary }}</span> }
+              </div>
+            </div>
+            @if (job.matchScore) {
+              <div class="detail-match" [ngClass]="matchClass(job.matchScore)">
+                <span class="detail-match__value">{{ job.matchScore }}%</span>
+                <span class="detail-match__label">compatibilité</span>
+              </div>
+            }
+          </div>
+
+          <div class="detail-header__actions">
+            <button class="hs-btn-primary" (click)="apply()" [disabled]="applying()">
+              @if (applying()) { <mat-spinner diameter="16" /> } @else { <mat-icon>send</mat-icon> }
+              {{ applying() ? 'Envoi…' : 'Postuler maintenant' }}
+            </button>
+            <button class="hs-btn-accent" (click)="optimizeCV()" [disabled]="optimizing()">
+              @if (optimizing()) { <mat-spinner diameter="16" /> } @else { <mat-icon>auto_awesome</mat-icon> }
+              {{ optimizing() ? 'Optimisation…' : 'Optimiser mon CV pour ce poste' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div class="hs-card detail-section">
+          <h2><mat-icon>description</mat-icon> Description du poste</h2>
+          <p class="detail-desc">{{ job.description }}</p>
+        </div>
+
+        <!-- Requirements -->
+        <div class="hs-card detail-section">
+          <h2><mat-icon>checklist</mat-icon> Compétences requises</h2>
+          <div class="skills-grid">
+            @for (req of job.requirements; track req) {
+              <span class="skill-chip">{{ req }}</span>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <aside class="detail-sidebar">
+        @if (job.matchScore) {
+          <div class="hs-card sidebar-card">
+            <h3><mat-icon>hub</mat-icon> Score de compatibilité</h3>
+            <div class="match-gauge-wrap">
+              <div class="match-gauge" [ngClass]="matchClass(job.matchScore)">
+                <span class="match-gauge__value">{{ job.matchScore }}%</span>
+              </div>
+              <div class="match-gauge__bars">
+                <div class="match-bar">
+                  <span>Mots-clés</span>
+                  <div class="bar"><div class="bar__fill" [style.width]="job.matchScore * 0.9 + '%'"></div></div>
+                </div>
+                <div class="match-bar">
+                  <span>Expérience</span>
+                  <div class="bar"><div class="bar__fill" [style.width]="job.matchScore * 0.85 + '%'"></div></div>
+                </div>
+                <div class="match-bar">
+                  <span>Compétences</span>
+                  <div class="bar"><div class="bar__fill" [style.width]="job.matchScore * 0.95 + '%'"></div></div>
+                </div>
+              </div>
+            </div>
+            <button class="hs-btn-accent sidebar-optimize-btn" (click)="optimizeCV()">
+              <mat-icon>auto_awesome</mat-icon> Optimiser mon CV
+            </button>
+          </div>
+        }
+
+        <!-- Job info -->
+        <div class="hs-card sidebar-card">
+          <h3><mat-icon>info</mat-icon> Détails du poste</h3>
+          <div class="info-rows">
+            <div class="info-row"><mat-icon>work</mat-icon><span>{{ job.contractType }}</span></div>
+            <div class="info-row"><mat-icon>trending_up</mat-icon><span>{{ job.experienceLevel }}</span></div>
+            <div class="info-row"><mat-icon>category</mat-icon><span>{{ job.sector }}</span></div>
+            <div class="info-row"><mat-icon>source</mat-icon><span>Source : {{ job.source }}</span></div>
+            <div class="info-row"><mat-icon>schedule</mat-icon><span>Publié le {{ job.postedAt | date:'dd/MM/yyyy' }}</span></div>
+          </div>
+        </div>
+
+        <!-- Similar jobs -->
+        @if (similar().length > 0) {
+          <div class="hs-card sidebar-card">
+            <h3><mat-icon>work_outline</mat-icon> Offres similaires</h3>
+            <div class="similar-jobs">
+              @for (j of similar(); track j.id) {
+                <a class="similar-job" [routerLink]="'/jobs/' + j.id">
+                  <img [src]="j.logoUrl" [alt]="j.company" class="similar-job__logo" />
+                  <div class="similar-job__info">
+                    <span class="similar-job__title">{{ j.title }}</span>
+                    <span class="similar-job__co">{{ j.company }}</span>
+                  </div>
+                  @if (j.matchScore) {
+                    <span class="similar-match" [ngClass]="matchClass(j.matchScore)">{{ j.matchScore }}%</span>
+                  }
+                </a>
+              }
+            </div>
+          </div>
+        }
+      </aside>
+    </div>
+  }
+}

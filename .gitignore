@@ -1,0 +1,28 @@
+# ── Angular frontend ──────────────────────────────────────────────────────────
+hiresync/node_modules/
+hiresync/dist/
+hiresync/.angular/
+hiresync/*.tsbuildinfo
+
+# ── Spring Boot backend (future) ──────────────────────────────────────────────
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+backend/*.log
+
+# ── Environment / secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+application-local.properties
+application-local.yml
+
+# ── IDEs ──────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.suo
+*.user
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

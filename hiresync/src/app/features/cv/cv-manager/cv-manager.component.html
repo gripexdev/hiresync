@@ -1,0 +1,98 @@
+<div class="page-header">
+  <h1>Mon CV</h1>
+  <p>Gérez vos CV et consultez leurs scores ATS</p>
+</div>
+
+<!-- Upload zone -->
+<div class="upload-zone" (click)="fileInput.click()" [class.upload-zone--loading]="uploading()">
+  <input #fileInput type="file" accept=".pdf,.doc,.docx" hidden (change)="onFileSelected($event)" />
+
+  @if (uploading()) {
+    <mat-spinner diameter="36" />
+    <span>Analyse du CV en cours…</span>
+  } @else {
+    <div class="upload-zone__icon"><mat-icon>upload_file</mat-icon></div>
+    <div class="upload-zone__text">
+      <span class="upload-zone__title">Glissez votre CV ici ou cliquez pour parcourir</span>
+      <span class="upload-zone__hint">Formats acceptés : PDF, DOC, DOCX — Max 10 MB</span>
+    </div>
+  }
+</div>
+
+@if (loading()) {
+  <div class="loading-center"><mat-spinner diameter="40" /></div>
+} @else {
+  <div class="cv-grid">
+    @for (cv of cvs(); track cv.id) {
+      <div class="hs-card cv-card" [class.cv-card--active]="cv.isActive">
+        @if (cv.isActive) {
+          <div class="cv-active-badge"><mat-icon>check_circle</mat-icon> CV actif</div>
+        }
+
+        <div class="cv-card__header">
+          <div class="cv-card__file-icon"><mat-icon>picture_as_pdf</mat-icon></div>
+          <div class="cv-card__info">
+            <span class="cv-card__name">{{ cv.fileName }}</span>
+            <span class="cv-card__date">Uploadé le {{ cv.uploadedAt | date:'dd/MM/yyyy' }}</span>
+          </div>
+
+          <!-- ATS Score ring -->
+          @if (cv.atsScore > 0) {
+            <div class="ats-ring-wrap">
+              <svg viewBox="0 0 64 64" class="ats-ring">
+                <circle cx="32" cy="32" r="28" fill="none" stroke="#E2E8F0" stroke-width="5"/>
+                <circle cx="32" cy="32" r="28" fill="none"
+                  [attr.stroke]="scoreColor(cv.atsScore)"
+                  stroke-width="5"
+                  stroke-linecap="round"
+                  [attr.stroke-dasharray]="circumference"
+                  [attr.stroke-dashoffset]="dashOffset(cv.atsScore)"
+                  transform="rotate(-90 32 32)"/>
+              </svg>
+              <div class="ats-ring__label">
+                <span class="ats-ring__value" [style.color]="scoreColor(cv.atsScore)">{{ cv.atsScore }}</span>
+                <span class="ats-ring__unit">ATS</span>
+              </div>
+            </div>
+          }
+        </div>
+
+        @if (cv.atsScore > 0) {
+          <div class="cv-score-bar">
+            <div class="cv-score-bar__fill"
+              [style.width]="cv.atsScore + '%'"
+              [style.background]="scoreColor(cv.atsScore)">
+            </div>
+          </div>
+          <div class="cv-score-meta">
+            <span [style.color]="scoreColor(cv.atsScore)" style="font-weight:600">{{ scoreLabel(cv.atsScore) }}</span>
+            <span class="cv-score-tip">
+              @if (cv.atsScore < 70) { Optimisez ce CV avec l'IA pour augmenter vos chances }
+              @else { Bon score — votre CV passe la plupart des filtres ATS }
+            </span>
+          </div>
+        }
+
+        @if (cv.parsedSections) {
+          <div class="cv-sections">
+            @for (section of cv.parsedSections; track section.title) {
+              <div class="cv-section">
+                <span class="cv-section__title">{{ section.title }}</span>
+                <p class="cv-section__content">{{ section.content }}</p>
+              </div>
+            }
+          </div>
+        }
+
+        <div class="cv-card__actions">
+          <a routerLink="/jobs" class="hs-btn-secondary cv-btn">
+            <mat-icon>work_outline</mat-icon> Trouver des offres
+          </a>
+          <a routerLink="/cv/optimize/opt1" class="hs-btn-accent cv-btn">
+            <mat-icon>auto_awesome</mat-icon> Optimiser l'IA
+          </a>
+        </div>
+      </div>
+    }
+  </div>
+}

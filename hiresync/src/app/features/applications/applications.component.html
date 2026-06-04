@@ -1,0 +1,128 @@
+<div class="page-header">
+  <div class="page-header__row">
+    <div>
+      <h1>Mes candidatures</h1>
+      <p>{{ all().length }} candidature(s) au total</p>
+    </div>
+    <div class="view-toggle">
+      <button [class.active]="view() === 'kanban'" (click)="view.set('kanban')">
+        <mat-icon>view_kanban</mat-icon> Kanban
+      </button>
+      <button [class.active]="view() === 'table'" (click)="view.set('table')">
+        <mat-icon>table_rows</mat-icon> Tableau
+      </button>
+    </div>
+  </div>
+</div>
+
+@if (loading()) {
+  <div class="loading-center"><mat-spinner diameter="40" /></div>
+} @else {
+
+  <!-- ── Kanban view ── -->
+  @if (view() === 'kanban') {
+    <div class="kanban-board">
+      @for (col of columns(); track col.id) {
+        <div class="kanban-column">
+          <div class="column-header">
+            <div class="column-header__dot" [style.background]="col.color"></div>
+            <h3>{{ col.label }}</h3>
+            <span class="count">{{ col.apps.length }}</span>
+          </div>
+
+          @for (app of col.apps; track app.id) {
+            <div class="kanban-card" (click)="selected.set(app)">
+              <div class="kanban-card__company">{{ app.company }}</div>
+              <div class="kanban-card__title">{{ app.jobTitle }}</div>
+              <div class="kanban-card__meta">
+                <span><mat-icon>location_on</mat-icon>{{ app.location }}</span>
+                @if (app.matchScore) {
+                  <span class="match-chip" [ngClass]="matchClass(app.matchScore)">{{ app.matchScore }}%</span>
+                }
+              </div>
+              @if (app.nextAction) {
+                <div class="kanban-card__action">
+                  <mat-icon>arrow_forward</mat-icon>{{ app.nextAction }}
+                </div>
+              }
+              <div class="kanban-card__date">{{ app.appliedAt | date:'dd/MM/yyyy' }}</div>
+            </div>
+          }
+
+          @if (col.apps.length === 0) {
+            <div class="kanban-empty">Aucune candidature</div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ── Table view ── -->
+  @if (view() === 'table') {
+    <div class="hs-card table-card">
+      <table class="app-table">
+        <thead>
+          <tr>
+            <th>Poste</th>
+            <th>Entreprise</th>
+            <th>Ville</th>
+            <th>Date</th>
+            <th>Match</th>
+            <th>Statut</th>
+            <th>Prochaine étape</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (app of all(); track app.id) {
+            <tr (click)="selected.set(app)" class="table-row">
+              <td class="td-title">{{ app.jobTitle }}</td>
+              <td>{{ app.company }}</td>
+              <td>{{ app.location }}</td>
+              <td>{{ app.appliedAt | date:'dd/MM' }}</td>
+              <td>
+                @if (app.matchScore) {
+                  <span class="match-chip" [ngClass]="matchClass(app.matchScore)">{{ app.matchScore }}%</span>
+                }
+              </td>
+              <td><app-status-badge [status]="app.status" /></td>
+              <td class="td-action">{{ app.nextAction ?? '—' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}
+
+<!-- ── Detail modal ── -->
+@if (selected(); as app) {
+  <div class="modal-backdrop" (click)="selected.set(null)">
+    <div class="modal-panel hs-card" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <h2>{{ app.jobTitle }}</h2>
+          <span>{{ app.company }} · {{ app.location }}</span>
+        </div>
+        <button class="modal-close" (click)="selected.set(null)"><mat-icon>close</mat-icon></button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-row"><mat-icon>calendar_today</mat-icon><span>Candidaté le {{ app.appliedAt | date:'dd/MM/yyyy' }}</span></div>
+        <div class="modal-row"><mat-icon>flag</mat-icon><span><app-status-badge [status]="app.status" /></span></div>
+        @if (app.matchScore) {
+          <div class="modal-row"><mat-icon>hub</mat-icon><span>Compatibilité : <strong>{{ app.matchScore }}%</strong></span></div>
+        }
+        @if (app.nextAction) {
+          <div class="modal-row"><mat-icon>arrow_forward</mat-icon><span>{{ app.nextAction }}</span></div>
+        }
+      </div>
+      <div class="modal-footer">
+        <a [routerLink]="'/jobs/' + app.jobId" class="hs-btn-secondary modal-btn" (click)="selected.set(null)">
+          <mat-icon>open_in_new</mat-icon> Voir l'offre
+        </a>
+        <a routerLink="/cv/optimize/opt1" class="hs-btn-accent modal-btn" (click)="selected.set(null)">
+          <mat-icon>auto_awesome</mat-icon> Optimiser CV
+        </a>
+      </div>
+    </div>
+  </div>
+}

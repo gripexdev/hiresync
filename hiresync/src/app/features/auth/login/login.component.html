@@ -1,0 +1,74 @@
+<div class="auth-page">
+  <!-- Left panel -->
+  <div class="auth-page__left">
+    <div class="auth-brand">
+      <div class="auth-brand__icon"><mat-icon>hub</mat-icon></div>
+      <span class="auth-brand__name">HireSync</span>
+    </div>
+    <div class="auth-page__tagline">
+      <h2>Trouvez votre emploi<br/><span class="gradient-text">plus vite avec l'IA</span></h2>
+      <p>Optimisation de CV, matching sémantique et suivi de candidatures — le tout en un.</p>
+    </div>
+    <div class="auth-page__features">
+      <div class="auth-feature"><mat-icon>check_circle</mat-icon> Scraping multi-sources (recrute.ma, LinkedIn…)</div>
+      <div class="auth-feature"><mat-icon>check_circle</mat-icon> Optimisation IA du CV (LLaMA 3.1 / Mistral)</div>
+      <div class="auth-feature"><mat-icon>check_circle</mat-icon> Tableau de bord de candidatures en temps réel</div>
+    </div>
+  </div>
+
+  <!-- Right panel: form -->
+  <div class="auth-page__right">
+    <div class="auth-form-card">
+      <h1 class="auth-form-card__title">Bienvenue</h1>
+      <p class="auth-form-card__subtitle">Connectez-vous à votre compte HireSync</p>
+
+      @if (error()) {
+        <div class="auth-error">
+          <mat-icon>error_outline</mat-icon>
+          {{ error() }}
+        </div>
+      }
+
+      <form [formGroup]="form" (ngSubmit)="submit()" class="auth-form">
+        <mat-form-field appearance="outline">
+          <mat-label>Adresse email</mat-label>
+          <mat-icon matPrefix>email</mat-icon>
+          <input matInput type="email" formControlName="email" placeholder="vous@exemple.ma" />
+          @if (form.get('email')?.hasError('required') && form.get('email')?.touched) {
+            <mat-error>Email requis</mat-error>
+          }
+          @if (form.get('email')?.hasError('email') && form.get('email')?.touched) {
+            <mat-error>Email invalide</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Mot de passe</mat-label>
+          <mat-icon matPrefix>lock</mat-icon>
+          <input matInput [type]="showPass() ? 'text' : 'password'" formControlName="password" />
+          <button mat-icon-button matSuffix type="button" (click)="showPass.set(!showPass())">
+            <mat-icon>{{ showPass() ? 'visibility_off' : 'visibility' }}</mat-icon>
+          </button>
+          @if (form.get('password')?.hasError('required') && form.get('password')?.touched) {
+            <mat-error>Mot de passe requis</mat-error>
+          }
+        </mat-form-field>
+
+        <button type="submit" class="auth-submit-btn" [disabled]="loading()">
+          @if (loading()) {
+            <mat-spinner diameter="18" color="accent"></mat-spinner>
+            Connexion…
+          } @else {
+            <mat-icon>login</mat-icon>
+            Se connecter
+          }
+        </button>
+      </form>
+
+      <p class="auth-form-card__switch">
+        Pas encore de compte ?
+        <a routerLink="/register">Créer un compte gratuitement</a>
+      </p>
+    </div>
+  </div>
+</div>

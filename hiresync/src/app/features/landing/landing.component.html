@@ -1,0 +1,175 @@
+<!-- ── Navbar ─────────────────────────────────────────────────────────────────── -->
+<nav class="landing-nav">
+  <div class="landing-nav__brand">
+    <div class="brand-icon"><mat-icon>hub</mat-icon></div>
+    <span class="brand-name">HireSync</span>
+  </div>
+  <div class="landing-nav__actions">
+    <a routerLink="/login" class="nav-link">Connexion</a>
+    <a routerLink="/register" class="hs-btn-primary">Commencer gratuitement</a>
+  </div>
+</nav>
+
+<!-- ── Hero ──────────────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="hero__content">
+    <div class="hero__badge">
+      <mat-icon>auto_awesome</mat-icon>
+      Propulsé par LLaMA 3.1 &amp; Mistral 7B
+    </div>
+    <h1 class="hero__title">
+      Trouvez votre emploi<br/>
+      <span class="hero__title-accent">plus vite avec l'IA</span>
+    </h1>
+    <p class="hero__subtitle">
+      HireSync scrape les meilleures offres du marché marocain, optimise votre CV avec l'IA
+      et suit toutes vos candidatures — le tout en une seule plateforme.
+    </p>
+    <div class="hero__cta">
+      <a routerLink="/register" class="hs-btn-primary hero__cta-main">
+        <mat-icon>rocket_launch</mat-icon>
+        Commencer gratuitement
+      </a>
+      <a routerLink="/login" class="hs-btn-secondary">
+        Se connecter
+      </a>
+    </div>
+    <div class="hero__stats">
+      <div class="hero__stat">
+        <span class="hero__stat-value">75%</span>
+        <span class="hero__stat-label">des CVs rejetés par les ATS</span>
+      </div>
+      <div class="hero__stat-divider"></div>
+      <div class="hero__stat">
+        <span class="hero__stat-value">+26pt</span>
+        <span class="hero__stat-label">score ATS moyen après optimisation</span>
+      </div>
+      <div class="hero__stat-divider"></div>
+      <div class="hero__stat">
+        <span class="hero__stat-value">500+</span>
+        <span class="hero__stat-label">offres marocaines indexées / jour</span>
+      </div>
+    </div>
+  </div>
+  <div class="hero__visual">
+    <div class="hero__dashboard-mock">
+      <div class="mock-topbar">
+        <div class="mock-dot red"></div>
+        <div class="mock-dot yellow"></div>
+        <div class="mock-dot green"></div>
+        <span class="mock-title">HireSync Dashboard</span>
+      </div>
+      <div class="mock-body">
+        <div class="mock-stat-row">
+          <div class="mock-stat">
+            <span class="mock-stat-value primary">7</span>
+            <span class="mock-stat-label">Candidatures</span>
+          </div>
+          <div class="mock-stat">
+            <span class="mock-stat-value accent">2</span>
+            <span class="mock-stat-label">Entretiens</span>
+          </div>
+          <div class="mock-stat">
+            <span class="mock-stat-value dark">88%</span>
+            <span class="mock-stat-label">Score ATS</span>
+          </div>
+        </div>
+        <div class="mock-jobs">
+          <div class="mock-job">
+            <div class="mock-job-avatar" style="background:#1B4F72">OCP</div>
+            <div class="mock-job-info">
+              <span class="mock-job-title">Ingénieur DevOps Senior</span>
+              <span class="mock-job-co">OCP Group · Casablanca</span>
+            </div>
+            <div class="mock-match">92%</div>
+          </div>
+          <div class="mock-job">
+            <div class="mock-job-avatar" style="background:#2E86AB">MT</div>
+            <div class="mock-job-info">
+              <span class="mock-job-title">Dev Full Stack Angular</span>
+              <span class="mock-job-co">Maroc Telecom · Rabat</span>
+            </div>
+            <div class="mock-match">87%</div>
+          </div>
+          <div class="mock-job">
+            <div class="mock-job-avatar" style="background:#17A589">CIH</div>
+            <div class="mock-job-info">
+              <span class="mock-job-title">Data Scientist IA/ML</span>
+              <span class="mock-job-co">CIH Bank · Casablanca</span>
+            </div>
+            <div class="mock-match">78%</div>
+          </div>
+        </div>
+        <div class="mock-ai-bar">
+          <mat-icon>auto_awesome</mat-icon>
+          <span>IA en train d'optimiser votre CV pour OCP…</span>
+          <div class="mock-progress"><div class="mock-progress-fill"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Features ───────────────────────────────────────────────────────────────── -->
+<section class="features">
+  <div class="section-header">
+    <h2>Tout ce dont vous avez besoin</h2>
+    <p>Une plateforme complète qui couvre chaque étape de votre recherche d'emploi</p>
+  </div>
+  <div class="features__grid">
+    @for (f of features; track f.title) {
+      <div class="feature-card">
+        <div class="feature-card__icon">
+          <mat-icon>{{ f.icon }}</mat-icon>
+        </div>
+        <h3>{{ f.title }}</h3>
+        <p>{{ f.desc }}</p>
+      </div>
+    }
+  </div>
+</section>
+
+<!-- ── How it works ───────────────────────────────────────────────────────────── -->
+<section class="how-it-works">
+  <div class="section-header">
+    <h2>Comment ça marche ?</h2>
+    <p>5 étapes pour transformer votre recherche d'emploi</p>
+  </div>
+  <div class="steps">
+    @for (step of steps; track step.num; let last = $last) {
+      <div class="step">
+        <div class="step__num">{{ step.num }}</div>
+        <div class="step__icon"><mat-icon>{{ step.icon }}</mat-icon></div>
+        <h3>{{ step.title }}</h3>
+        <p>{{ step.desc }}</p>
+      </div>
+      @if (!last) { <div class="step__arrow"><mat-icon>arrow_forward</mat-icon></div> }
+    }
+  </div>
+</section>
+
+<!-- ── ATS Hook ────────────────────────────────────────────────────────────────── -->
+<section class="ats-hook">
+  <div class="ats-hook__content">
+    <div class="ats-hook__icon"><mat-icon>warning_amber</mat-icon></div>
+    <h2>75% des CVs sont rejetés avant d'être lus</h2>
+    <p>
+      Les ATS (Applicant Tracking Systems) filtrent automatiquement les candidatures.
+      Sans les bons mots-clés et le bon format, votre CV ne sera jamais vu — même si vous êtes le meilleur candidat.
+      HireSync optimise votre CV spécifiquement pour chaque offre.
+    </p>
+    <a routerLink="/register" class="hs-btn-primary">
+      <mat-icon>auto_awesome</mat-icon>
+      Optimiser mon CV maintenant
+    </a>
+  </div>
+</section>
+
+<!-- ── Footer ─────────────────────────────────────────────────────────────────── -->
+<footer class="landing-footer">
+  <div class="landing-footer__brand">
+    <div class="brand-icon brand-icon--sm"><mat-icon>hub</mat-icon></div>
+    <span class="brand-name">HireSync</span>
+  </div>
+  <p>© 2026 HireSync — Plateforme Intelligente de Recrutement pour le Marché Marocain</p>
+</footer>

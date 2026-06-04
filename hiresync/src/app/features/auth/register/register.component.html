@@ -1,0 +1,92 @@
+<div class="auth-page">
+  <div class="auth-page__left">
+    <div class="auth-brand">
+      <div class="auth-brand__icon"><mat-icon>hub</mat-icon></div>
+      <span class="auth-brand__name">HireSync</span>
+    </div>
+    <div class="auth-page__tagline">
+      <h2>Rejoignez<br/><span class="gradient-text">HireSync gratuitement</span></h2>
+      <p>Créez votre compte et commencez à optimiser vos candidatures dès aujourd'hui.</p>
+    </div>
+    <div class="auth-page__features">
+      <div class="auth-feature"><mat-icon>check_circle</mat-icon> 100% gratuit — aucune carte requise</div>
+      <div class="auth-feature"><mat-icon>check_circle</mat-icon> Optimisation IA illimitée de votre CV</div>
+      <div class="auth-feature"><mat-icon>check_circle</mat-icon> Offres du marché marocain en temps réel</div>
+    </div>
+  </div>
+
+  <div class="auth-page__right">
+    <div class="auth-form-card">
+      <h1 class="auth-form-card__title">Créer un compte</h1>
+      <p class="auth-form-card__subtitle">Commencez votre recherche d'emploi intelligente</p>
+
+      @if (error()) {
+        <div class="auth-error">
+          <mat-icon>error_outline</mat-icon> {{ error() }}
+        </div>
+      }
+
+      <form [formGroup]="form" (ngSubmit)="submit()" class="auth-form">
+        <mat-form-field appearance="outline">
+          <mat-label>Nom complet</mat-label>
+          <mat-icon matPrefix>person</mat-icon>
+          <input matInput formControlName="fullName" placeholder="Othmane Sadiky" />
+          @if (form.get('fullName')?.hasError('required') && form.get('fullName')?.touched) {
+            <mat-error>Nom complet requis</mat-error>
+          }
+          @if (form.get('fullName')?.hasError('minlength') && form.get('fullName')?.touched) {
+            <mat-error>Minimum 3 caractères</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Adresse email</mat-label>
+          <mat-icon matPrefix>email</mat-icon>
+          <input matInput type="email" formControlName="email" placeholder="vous@exemple.ma" />
+          @if (form.get('email')?.hasError('required') && form.get('email')?.touched) {
+            <mat-error>Email requis</mat-error>
+          }
+          @if (form.get('email')?.hasError('email') && form.get('email')?.touched) {
+            <mat-error>Email invalide</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Mot de passe</mat-label>
+          <mat-icon matPrefix>lock</mat-icon>
+          <input matInput [type]="showPass() ? 'text' : 'password'" formControlName="password" />
+          <button mat-icon-button matSuffix type="button" (click)="showPass.set(!showPass())">
+            <mat-icon>{{ showPass() ? 'visibility_off' : 'visibility' }}</mat-icon>
+          </button>
+          @if (form.get('password')?.hasError('required') && form.get('password')?.touched) {
+            <mat-error>Mot de passe requis</mat-error>
+          }
+          @if (form.get('password')?.hasError('minlength') && form.get('password')?.touched) {
+            <mat-error>Minimum 8 caractères</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Confirmer le mot de passe</mat-label>
+          <mat-icon matPrefix>lock_reset</mat-icon>
+          <input matInput [type]="showPass() ? 'text' : 'password'" formControlName="confirmPassword" />
+          @if (form.hasError('mismatch') && form.get('confirmPassword')?.touched) {
+            <mat-error>Les mots de passe ne correspondent pas</mat-error>
+          }
+        </mat-form-field>
+
+        <button type="submit" class="auth-submit-btn" [disabled]="loading()">
+          @if (loading()) {
+            <mat-spinner diameter="18" color="accent"></mat-spinner> Création…
+          } @else {
+            <mat-icon>person_add</mat-icon> Créer mon compte
+          }
+        </button>
+      </form>
+
+      <p class="auth-form-card__switch">
+        Déjà un compte ? <a routerLink="/login">Se connecter</a>
+      </p>
+    </div>
+  </div>
+</div>

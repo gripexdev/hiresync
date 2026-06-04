@@ -1,0 +1,149 @@
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 60px;
+  padding: 0 24px;
+  background: #fff;
+  border-bottom: 1px solid #E2E8F0;
+  flex-shrink: 0;
+  gap: 16px;
+
+  &__left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  &__title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1A202C;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    cursor: pointer;
+    color: #64748B;
+    transition: all 0.15s;
+
+    &:hover { background: #F8FAFC; color: #2E86AB; }
+  }
+
+  &__right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  &__icon-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    color: #64748B;
+    text-decoration: none;
+    transition: all 0.15s;
+
+    &:hover { background: #F8FAFC; color: #2E86AB; }
+
+    mat-icon { font-size: 22px; width: 22px; height: 22px; }
+  }
+
+  &__badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: #EF4444;
+    color: #fff;
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    line-height: 1;
+  }
+
+  &__user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px 4px 4px;
+    border: 1px solid #E2E8F0;
+    border-radius: 9999px;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover { border-color: #2E86AB; background: #F8FAFC; }
+  }
+
+  &__avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 9999px;
+    object-fit: cover;
+  }
+
+  &__user-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1A202C;
+  }
+
+  &__chevron {
+    font-size: 16px !important;
+    width: 16px !important;
+    height: 16px !important;
+    color: #94A3B8;
+  }
+}
+
+// Mat-menu overrides
+.user-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.user-menu-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+}
+
+.user-menu-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1A202C;
+  margin: 0;
+}
+
+.user-menu-email {
+  font-size: 12px;
+  color: #94A3B8;
+  margin: 0;
+}
+
+.logout-item { color: #EF4444 !important; mat-icon { color: #EF4444 !important; } }
