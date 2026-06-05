@@ -1,0 +1,205 @@
+$primary: #2E86AB; $accent: #17A589;
+
+.studio {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+// ── Top bar ───────────────────────────────────────────────────────────────────
+.studio__topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 4px 16px;
+  border-bottom: 1px solid #E2E8F0;
+  margin-bottom: 20px;
+
+  h1 { font-size: 20px; font-weight: 800; color: #1A202C; margin: 0; flex: 1; }
+}
+
+.back-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 14px; font-weight: 500; color: #64748B; text-decoration: none;
+  &:hover { color: $primary; }
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}
+
+.download-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 20px; border: none; border-radius: 9px;
+  background: linear-gradient(135deg, $primary, $accent);
+  color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
+  transition: opacity .2s, transform .1s;
+  &:hover:not(:disabled) { opacity: .92; transform: translateY(-1px); }
+  &:disabled { opacity: .6; cursor: not-allowed; }
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}
+
+.studio__loading {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 14px; padding: 80px; color: #94A3B8;
+}
+
+// ── Body layout ───────────────────────────────────────────────────────────────
+.studio__body {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 24px;
+  align-items: start;
+  flex: 1;
+  min-height: 0;
+
+  @media (max-width: 900px) { grid-template-columns: 1fr; }
+}
+
+// ── Customization panel ───────────────────────────────────────────────────────
+.panel {
+  background: #fff;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 8px 18px 18px;
+  position: sticky;
+  top: 0;
+
+  &__section {
+    padding: 16px 0;
+    border-bottom: 1px solid #F1F5F9;
+
+    h3 {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 13px; font-weight: 700; color: #1A202C; margin: 0 0 12px;
+      mat-icon { font-size: 17px; width: 17px; height: 17px; color: $primary; }
+    }
+  }
+
+  &__tip {
+    display: flex; gap: 9px; align-items: flex-start;
+    padding: 13px; margin-top: 14px;
+    background: linear-gradient(135deg, rgba(46,134,171,.06), rgba(23,165,137,.06));
+    border: 1px solid rgba(46,134,171,.18); border-radius: 10px;
+    font-size: 11.5px; color: #475569; line-height: 1.5;
+    mat-icon { font-size: 16px; width: 16px; height: 16px; color: $accent; flex-shrink: 0; }
+  }
+}
+
+// Templates
+.template-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.template-card {
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  padding: 16px 8px; border: 1.5px solid #E2E8F0; border-radius: 10px;
+  background: #fff; cursor: pointer; transition: all .15s;
+  font-size: 12px; font-weight: 600; color: #64748B;
+
+  mat-icon { font-size: 24px; width: 24px; height: 24px; color: #94A3B8; }
+  &:hover { border-color: $primary; }
+  &--active {
+    border-color: $primary; background: rgba(46,134,171,.05); color: $primary;
+    mat-icon { color: $primary; }
+  }
+}
+
+// Swatches
+.swatches { display: flex; flex-wrap: wrap; gap: 9px; }
+.swatch {
+  width: 30px; height: 30px; border-radius: 8px;
+  border: 2px solid transparent; cursor: pointer; padding: 0;
+  position: relative; transition: transform .12s;
+  &:hover { transform: scale(1.1); }
+  &--active { border-color: #1A202C; box-shadow: 0 0 0 2px #fff inset; }
+
+  &--custom {
+    display: flex; align-items: center; justify-content: center;
+    background: #F1F5F9; border: 1.5px dashed #CBD5E1;
+    mat-icon { font-size: 16px; width: 16px; height: 16px; color: #64748B; }
+    &:hover { border-color: $primary; }
+  }
+}
+
+// Font select
+.font-select {
+  width: 100%; padding: 9px 12px; border: 1.5px solid #E2E8F0;
+  border-radius: 8px; font-size: 13px; color: #1A202C; background: #fff;
+  cursor: pointer;
+  &:focus { outline: none; border-color: $primary; }
+}
+
+// Photo
+.photo-controls { display: flex; flex-direction: column; gap: 12px; }
+
+.toggle {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 13px; color: #475569; cursor: pointer;
+  input { display: none; }
+
+  &__track {
+    width: 38px; height: 22px; border-radius: 9999px; background: #CBD5E1;
+    position: relative; transition: background .2s; flex-shrink: 0;
+  }
+  &__thumb {
+    position: absolute; top: 2px; left: 2px;
+    width: 18px; height: 18px; border-radius: 50%; background: #fff;
+    transition: transform .2s;
+  }
+  input:checked + &__track { background: $accent; }
+  input:checked + &__track &__thumb { transform: translateX(16px); }
+}
+
+.photo-preview {
+  position: relative; width: 72px; height: 72px;
+  img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; border: 1px solid #E2E8F0; }
+}
+.photo-remove {
+  position: absolute; top: -6px; right: -6px;
+  width: 22px; height: 22px; border-radius: 50%; border: none;
+  background: #EF4444; color: #fff; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  mat-icon { font-size: 14px; width: 14px; height: 14px; }
+}
+
+.photo-upload {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px; border: 1.5px solid $primary; border-radius: 8px;
+  color: $primary; font-size: 13px; font-weight: 600; cursor: pointer;
+  align-self: flex-start; transition: background .15s;
+  &:hover { background: rgba(46,134,171,.06); }
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+}
+.photo-hint { font-size: 11px; color: #94A3B8; line-height: 1.4; margin: 0; }
+
+// ── Preview ───────────────────────────────────────────────────────────────────
+.preview {
+  background: #E2E8F0;
+  border-radius: 14px;
+  padding: 28px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow: auto;
+  min-height: 70vh;
+}
+
+// Height-compensating box: holds the scaled A4 so layout space matches the visual size
+.preview__fit {
+  position: relative;
+}
+
+.preview__frame-wrap {
+  width: 794px;     // A4 width @96dpi
+  height: 1123px;   // A4 height @96dpi
+  background: #fff;
+  box-shadow: 0 12px 40px rgba(0,0,0,.18);
+  border-radius: 4px;
+  overflow: hidden;
+  transform-origin: top left;
+  position: absolute;
+  top: 0; left: 0;
+}
+
+.preview__frame {
+  width: 794px;
+  height: 1123px;
+  border: none;
+  display: block;
+  background: #fff;
+}

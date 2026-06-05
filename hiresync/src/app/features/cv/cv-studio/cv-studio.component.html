@@ -1,0 +1,120 @@
+<div class="studio">
+  <!-- ── Top bar ──────────────────────────────────────────────────────────── -->
+  <div class="studio__topbar">
+    <a [routerLink]="'/cv/optimize/' + id" class="back-link">
+      <mat-icon>arrow_back</mat-icon> Résultat
+    </a>
+    <h1>CV Studio</h1>
+    <button class="download-btn" (click)="download()" [disabled]="downloading() || loading()">
+      @if (downloading()) {
+        <mat-spinner diameter="16" /> Génération…
+      } @else {
+        <mat-icon>download</mat-icon> Télécharger en PDF
+      }
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="studio__loading"><mat-spinner diameter="42" /><p>Chargement du CV…</p></div>
+  } @else {
+    <div class="studio__body">
+      <!-- ── Customization panel ──────────────────────────────────────────── -->
+      <aside class="panel">
+        <!-- Templates -->
+        <div class="panel__section">
+          <h3><mat-icon>dashboard_customize</mat-icon> Modèle</h3>
+          <div class="template-grid">
+            @for (t of templates; track t.id) {
+              <button class="template-card"
+                      [class.template-card--active]="options().template === t.id"
+                      (click)="setTemplate(t.id)">
+                <mat-icon>{{ t.icon }}</mat-icon>
+                <span>{{ t.label }}</span>
+              </button>
+            }
+          </div>
+        </div>
+
+        <!-- Accent colour -->
+        <div class="panel__section">
+          <h3><mat-icon>palette</mat-icon> Couleur d'accent</h3>
+          <div class="swatches">
+            @for (c of accents; track c) {
+              <button class="swatch"
+                      [class.swatch--active]="options().accentColor === c"
+                      [style.background]="c"
+                      (click)="setAccent(c)">
+              </button>
+            }
+            <label class="swatch swatch--custom" matTooltip="Couleur personnalisée">
+              <mat-icon>add</mat-icon>
+              <input type="color" [value]="options().accentColor" (input)="onAccentInput($event)" hidden />
+            </label>
+          </div>
+        </div>
+
+        <!-- Font -->
+        <div class="panel__section">
+          <h3><mat-icon>text_fields</mat-icon> Police</h3>
+          <select class="font-select" [value]="options().fontFamily" (change)="onFontChange($event)">
+            @for (f of fonts; track f.value) {
+              <option [value]="f.value">{{ f.label }}</option>
+            }
+          </select>
+        </div>
+
+        <!-- Photo -->
+        <div class="panel__section">
+          <h3><mat-icon>account_circle</mat-icon> Photo</h3>
+
+          <div class="photo-controls">
+            <label class="toggle">
+              <input type="checkbox" [checked]="options().showPhoto" (change)="togglePhoto()" />
+              <span class="toggle__track"><span class="toggle__thumb"></span></span>
+              Afficher la photo
+            </label>
+
+            @if (cv()?.photo) {
+              <div class="photo-preview">
+                <img [src]="cv()!.photo" alt="photo" />
+                <button class="photo-remove" (click)="removePhoto()" matTooltip="Supprimer">
+                  <mat-icon>close</mat-icon>
+                </button>
+              </div>
+            }
+
+            <label class="photo-upload">
+              <input type="file" accept="image/*" hidden (change)="onPhotoSelected($event)" />
+              <mat-icon>upload</mat-icon>
+              {{ cv()?.photo ? 'Changer la photo' : 'Ajouter une photo' }}
+            </label>
+            <p class="photo-hint">Templates avec photo : Moderne, Classique. Astuce ATS : certains recruteurs préfèrent sans photo.</p>
+          </div>
+        </div>
+
+        <!-- Tip -->
+        <div class="panel__tip">
+          <mat-icon>auto_awesome</mat-icon>
+          <span>L'aperçu à droite est <strong>exactement</strong> le PDF que vous téléchargerez (rendu vectoriel).</span>
+        </div>
+      </aside>
+
+      <!-- ── Live preview ─────────────────────────────────────────────────── -->
+      <div class="preview" #previewArea>
+        <!-- Height-compensating outer box (scaled element keeps original layout size) -->
+        <div class="preview__fit"
+             [style.height.px]="1123 * previewScale()"
+             [style.width.px]="794 * previewScale()">
+          <div class="preview__frame-wrap"
+               [style.transform]="'scale(' + previewScale() + ')'">
+            <iframe class="preview__frame"
+                    [srcdoc]="safeSrcdoc()"
+                    title="Aperçu du CV"
+                    sandbox="allow-same-origin">
+            </iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</div>

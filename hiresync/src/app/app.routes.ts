@@ -43,6 +43,10 @@ export const routes: Routes = [
         loadComponent: () => import('./features/cv/cv-optimizer/cv-optimizer.component').then(m => m.CvOptimizerComponent),
       },
       {
+        path: 'cv/studio/:id',
+        loadComponent: () => import('./features/cv/cv-studio/cv-studio.component').then(m => m.CvStudioComponent),
+      },
+      {
         path: 'applications',
         loadComponent: () => import('./features/applications/applications.component').then(m => m.ApplicationsComponent),
       },

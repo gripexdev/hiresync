@@ -4,7 +4,8 @@ import { RouterModule, ActivatedRoute } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { Subject, takeUntil, timeout, catchError, of } from 'rxjs';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { Subject, takeUntil } from 'rxjs';
 import { CvService } from '../../../core/services/cv.service';
 import { WebSocketService } from '../../../core/services/websocket.service';
 import { CVOptimizationResult, OptimizationStatus } from '../../../core/models/cv.model';
@@ -18,7 +19,7 @@ interface ProcessStep {
 @Component({
   selector: 'app-cv-optimizer',
   standalone: true,
-  imports: [CommonModule, RouterModule, MatIconModule, MatButtonModule, MatProgressSpinnerModule],
+  imports: [CommonModule, RouterModule, MatIconModule, MatButtonModule, MatProgressSpinnerModule, MatSnackBarModule],
   templateUrl: './cv-optimizer.component.html',
   styleUrls: ['./cv-optimizer.component.scss'],
 })
@@ -28,8 +29,11 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
   private cvSvc    = inject(CvService);
   private wsSvc    = inject(WebSocketService);
   private route    = inject(ActivatedRoute);
+  private snack    = inject(MatSnackBar);
   private destroy$ = new Subject<void>();
   private cancel$  = new Subject<void>();
+
+  downloading = signal(false);
 
   // ── State ────────────────────────────────────────────────────────────────────
   result    = signal<CVOptimizationResult | null>(null);
@@ -175,6 +179,34 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
     if (score >= 80) return '#10B981';
     if (score >= 60) return '#F59E0B';
     return '#EF4444';
+  }
+
+  // ── Download ─────────────────────────────────────────────────────────────────
+  /**
+   * Requests the PDF from Spring Boot with the JWT Bearer token
+   * (plain <a href> can't send auth headers), then triggers browser download.
+   */
+  download(): void {
+    this.downloading.set(true);
+    this.cvSvc.downloadOptimizedCv(this.id).pipe(
+      takeUntil(this.destroy$),
+    ).subscribe({
+      next: (blob: Blob) => {
+        const url  = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href      = url;
+        link.download  = `CV_HireSync_Optimise_${this.id.slice(0, 8)}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        this.downloading.set(false);
+      },
+      error: () => {
+        this.downloading.set(false);
+        this.snack.open('❌ Erreur lors du téléchargement', 'OK', { duration: 3500 });
+      },
+    });
   }
 
   changeLabel(type: string): string {

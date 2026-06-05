@@ -41,6 +41,10 @@ public class CvOptimization {
     @Column(columnDefinition = "TEXT")
     private String suggestedChangesJson;
 
+    /** Full structured optimized CV as JSON (name, summary, experience, skills…) */
+    @Column(columnDefinition = "TEXT")
+    private String optimizedCvJson;
+
     /** Path to the optimized CV file on disk */
     private String optimizedCvPath;
 

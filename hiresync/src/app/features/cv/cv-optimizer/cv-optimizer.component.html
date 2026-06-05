@@ -172,16 +172,27 @@
 
       <!-- Right sidebar -->
       <div class="optimizer-sidebar">
-        <!-- Download -->
+        <!-- Customize & download -->
         <div class="hs-card sidebar-action-card">
-          <h3><mat-icon>download</mat-icon> Télécharger</h3>
-          <p>Votre CV optimisé est prêt. Téléchargez-le en PDF et utilisez-le pour vos candidatures.</p>
-          <a [href]="r.optimizedCvUrl" download class="hs-btn-primary dl-btn">
-            <mat-icon>download</mat-icon> Télécharger le CV optimisé
+          <h3><mat-icon>brush</mat-icon> Personnaliser &amp; télécharger</h3>
+          <p>Ouvrez le CV Studio : choisissez un modèle, vos couleurs, ajoutez une photo, puis téléchargez un PDF parfait.</p>
+
+          <!-- Primary: open the CV Studio -->
+          <a [routerLink]="'/cv/studio/' + id" class="hs-btn-primary dl-btn">
+            <mat-icon>auto_awesome</mat-icon> Ouvrir le CV Studio
           </a>
-          <a routerLink="/jobs" class="hs-btn-secondary dl-btn">
-            <mat-icon>work_outline</mat-icon> Voir les offres compatibles
-          </a>
+
+          <!-- Secondary: quick basic PDF (legacy PDFBox) -->
+          <button class="hs-btn-secondary dl-btn"
+                  (click)="download()"
+                  [disabled]="downloading()">
+            @if (downloading()) {
+              <mat-spinner diameter="16" /> Génération…
+            } @else {
+              <mat-icon>download</mat-icon> Télécharger (version simple)
+            }
+          </button>
+
           <a routerLink="/cv" class="hs-btn-secondary dl-btn">
             <mat-icon>arrow_back</mat-icon> Retour au CV Manager
           </a>

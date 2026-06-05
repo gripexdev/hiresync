@@ -69,16 +69,21 @@ public class OptimizationConsumer {
 
             // ── Step 2: Call OpenRouter (Gemma 4 31B free) ───────────────────
             String cvText = cv.getExtractedText() != null ? cv.getExtractedText() : "";
-            String suggestionsJson = openRouter.optimizeCv(cvText, msg.jobDescription());
+            String llmResponse = openRouter.optimizeCv(cvText, msg.jobDescription());
 
-            // ── Step 3: Compute new ATS score ────────────────────────────────
+            // ── Step 3: Split the combined response into {suggestions, optimizedCv}
+            String suggestionsJson = extractSuggestions(llmResponse);
+            String optimizedCvJson = extractOptimizedCv(llmResponse);
+
+            // ── Step 4: Compute new ATS score ────────────────────────────────
             int suggCount  = countSuggestions(suggestionsJson);
             int newScore   = Math.min(cv.getAtsScore() + (suggCount * 5) + 8, 100);
 
-            // ── Step 4: Persist result ───────────────────────────────────────
+            // ── Step 5: Persist result ───────────────────────────────────────
             optim.setStatus(CvOptimization.OptimizationStatus.COMPLETED);
             optim.setOptimizedScore(newScore);
             optim.setSuggestedChangesJson(suggestionsJson);
+            optim.setOptimizedCvJson(optimizedCvJson);
             optim.setModelUsed("google/gemma-4-31b-it:free");
             optim.setProcessingTimeMs(System.currentTimeMillis() - start);
             optim.setCompletedAt(Instant.now());
@@ -111,5 +116,39 @@ public class OptimizationConsumer {
         } catch (Exception e) {
             return 3;
         }
+    }
+
+    /** Strip markdown fences and return the parsed root node, or null. */
+    private com.fasterxml.jackson.databind.JsonNode parseRoot(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String json = raw.trim()
+            .replaceAll("(?s)^```[a-zA-Z]*\\s*", "")
+            .replaceAll("(?s)\\s*```$", "").trim();
+        try { return objectMapper.readTree(json); }
+        catch (Exception e) { return null; }
+    }
+
+    /** Extract the "suggestions" array as JSON (handles object-wrapped or bare-array responses). */
+    private String extractSuggestions(String llmResponse) {
+        var root = parseRoot(llmResponse);
+        try {
+            if (root == null) return "[]";
+            if (root.isArray()) return root.toString();              // bare array (old format)
+            if (root.has("suggestions")) return root.get("suggestions").toString();
+            return "[]";
+        } catch (Exception e) {
+            return "[]";
+        }
+    }
+
+    /** Extract the "optimizedCv" object as JSON, or null if not present. */
+    private String extractOptimizedCv(String llmResponse) {
+        var root = parseRoot(llmResponse);
+        try {
+            if (root != null && root.has("optimizedCv")) {
+                return root.get("optimizedCv").toString();
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 }

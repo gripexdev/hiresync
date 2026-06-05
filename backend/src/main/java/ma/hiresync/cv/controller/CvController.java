@@ -5,9 +5,9 @@ import lombok.RequiredArgsConstructor;
 import ma.hiresync.auth.JwtService;
 import ma.hiresync.cv.dto.*;
 import ma.hiresync.cv.service.CvService;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,8 +20,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CvController {
 
-    private final CvService  cvService;
-    private final JwtService jwtService;
+    private final CvService        cvService;
+    private final JwtService       jwtService;
+    private final ma.hiresync.cv.service.PdfRenderService pdfRenderService;
 
     /** GET /api/cv/versions — list all CVs for the authenticated user */
     @GetMapping("/versions")
@@ -90,6 +91,60 @@ public class CvController {
             @RequestHeader("Authorization") String authHeader) {
         UUID userId = extractUserId(authHeader);
         return ResponseEntity.ok(cvService.getHistory(userId));
+    }
+
+    /**
+     * GET /api/cv/structured/{optimizationId}
+     * Returns the structured optimized CV (name, summary, experience, skills…)
+     * for the CV Studio to render into templates.
+     */
+    @GetMapping("/structured/{optimizationId}")
+    public ResponseEntity<Object> getStructuredCv(
+            @PathVariable UUID optimizationId,
+            @RequestHeader("Authorization") String authHeader) {
+        UUID userId = extractUserId(authHeader);
+        return ResponseEntity.ok(cvService.getStructuredCv(optimizationId, userId));
+    }
+
+    /**
+     * GET /api/cv/download/{optimizationId}  (legacy PDFBox path — kept as fallback)
+     * Generates a basic PDF from the optimized CV text.
+     */
+    @GetMapping("/download/{optimizationId}")
+    public ResponseEntity<byte[]> downloadOptimizedCv(
+            @PathVariable UUID optimizationId,
+            @RequestHeader("Authorization") String authHeader) throws IOException {
+        UUID userId = extractUserId(authHeader);
+        byte[] pdf  = cvService.generateOptimizedCvPdf(optimizationId, userId);
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"CV_HireSync_Optimised.pdf\"")
+                .body(pdf);
+    }
+
+    /**
+     * POST /api/cv/render-pdf
+     * Takes the fully-designed CV HTML (from the Angular CV Studio) and renders it
+     * to a pixel-perfect VECTOR PDF using headless Chromium (Playwright).
+     * This is the high-quality path: selectable text, crisp, ATS-readable.
+     */
+    @PostMapping("/render-pdf")
+    public ResponseEntity<byte[]> renderPdf(
+            @Valid @RequestBody ma.hiresync.cv.dto.RenderPdfRequest req,
+            @RequestHeader("Authorization") String authHeader) {
+        extractUserId(authHeader);   // validates JWT
+        byte[] pdf = pdfRenderService.htmlToPdf(req.html());
+
+        String name = (req.fileName() != null && !req.fileName().isBlank())
+            ? req.fileName() : "CV_HireSync.pdf";
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + name + "\"")
+                .body(pdf);
     }
 
     // ── Helper ────────────────────────────────────────────────────────────────

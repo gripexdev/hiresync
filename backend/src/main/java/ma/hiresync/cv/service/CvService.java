@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -30,6 +31,8 @@ public class CvService {
     private final UserRepository           userRepo;
     private final AtsScorer                atsScorer;
     private final OptimizationProducer     producer;
+    private final CvPdfGenerator           pdfGenerator;
+    private final CvTextParser             cvTextParser;
 
     @Value("${hiresync.cv.upload-dir}")
     private String uploadDir;
@@ -158,6 +161,40 @@ public class CvService {
                 .toList();
     }
 
+    // ── GET /api/cv/structured/{optimizationId} ──────────────────────────────
+    /**
+     * Returns the structured optimized CV (name, summary, experience, skills…)
+     * used by the CV Studio to render templates.
+     * Falls back to building a basic structure from the original CV text
+     * for older optimizations created before structured rebuild existed.
+     */
+    @Transactional(readOnly = true)
+    public Object getStructuredCv(UUID optimizationId, UUID userId) {
+        var optim = optimRepo.findByIdAndCvUserId(optimizationId, userId)
+            .orElseThrow(() -> new RuntimeException("Optimization not found"));
+
+        // 1. Preferred: the AI-rebuilt structured CV
+        if (optim.getOptimizedCvJson() != null && !optim.getOptimizedCvJson().isBlank()) {
+            try {
+                return new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readValue(optim.getOptimizedCvJson(), Object.class);
+            } catch (Exception e) {
+                log.warn("Could not parse optimizedCvJson: {}", e.getMessage());
+            }
+        }
+
+        // 2. Fallback: build a basic structure from the original extracted text
+        var cv = cvRepo.findById(optim.getCv().getId()).orElse(null);
+        return buildFallbackStructure(cv, optim);
+    }
+
+    /** Build a minimal structured CV from the raw extracted text (for legacy records). */
+    private Map<String, Object> buildFallbackStructure(Cv cv, CvOptimization optim) {
+        String text = (cv != null && cv.getExtractedText() != null) ? cv.getExtractedText() : "";
+        // Proper heuristic parser (sections, experience, education, skills, languages)
+        return cvTextParser.parse(text, optim.getJobTitle());
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
     private void validateFile(MultipartFile file) {
         if (file.isEmpty()) throw new IllegalArgumentException("File is empty");
@@ -168,6 +205,26 @@ public class CvService {
             throw new IllegalArgumentException("Only PDF and Word files are accepted");
         }
         if (file.getSize() > 10 * 1024 * 1024) throw new IllegalArgumentException("File exceeds 10 MB");
+    }
+
+    // ── GET /api/cv/download/{optimizationId} ────────────────────────────────
+    /**
+     * Generate the optimized CV PDF on demand.
+     * Applies AI suggestions to the original extracted text and renders a PDF.
+     */
+    @Transactional(readOnly = true)
+    public byte[] generateOptimizedCvPdf(UUID optimizationId, UUID userId) throws IOException {
+        var optim = optimRepo.findByIdAndCvUserId(optimizationId, userId)
+            .orElseThrow(() -> new RuntimeException("Optimization not found"));
+
+        if (optim.getStatus() != CvOptimization.OptimizationStatus.COMPLETED) {
+            throw new IllegalStateException("Optimization is not yet completed");
+        }
+
+        var cv = cvRepo.findById(optim.getCv().getId())
+            .orElseThrow(() -> new RuntimeException("CV not found"));
+
+        return pdfGenerator.generate(cv, optim);
     }
 
     /**

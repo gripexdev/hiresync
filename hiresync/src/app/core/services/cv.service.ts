@@ -7,6 +7,7 @@ import {
   CVOptimizationTriggerResponse, CVOptimizationHistoryItem,
   CVOptimizationWsEvent,
 } from '../models/cv.model';
+import { StructuredCv } from '../models/studio.model';
 
 // ── Mock data (replace with real HTTP once backend is ready) ──────────────────
 const MOCK_CVS: CV[] = [
@@ -138,6 +139,17 @@ export class CvService {
     return this.http.get<CVOptimizationHistoryItem[]>(`${this.base}/optimization-history`);
   }
 
+  /**
+   * GET /api/cv/download/{optimizationId} → Blob (application/pdf)
+   * Uses HttpClient with { responseType: 'blob' } so the JWT interceptor
+   * attaches the Bearer token automatically — plain <a href> can't do this.
+   */
+  downloadOptimizedCv(optimizationId: string): Observable<Blob> {
+    return this.http.get(`${this.base}/download/${optimizationId}`, {
+      responseType: 'blob',
+    });
+  }
+
   // ── Polling helper ────────────────────────────────────────────────────────
   /**
    * Polls GET /api/cv/optimize/{id} every 3s until status is 'completed'|'failed'.
@@ -150,5 +162,17 @@ export class CvService {
       filter(r => r.status === 'completed' || r.status === 'failed'),
       takeUntil(cancel$),
     );
+  }
+
+  // ── GET /api/cv/structured/{id} — structured CV for the Studio ───────────────
+  getStructuredCv(optimizationId: string): Observable<StructuredCv> {
+    return this.http.get<StructuredCv>(`${this.base}/structured/${optimizationId}`);
+  }
+
+  // ── POST /api/cv/render-pdf — HTML → vector PDF (headless Chrome) ────────────
+  renderPdf(html: string, fileName: string): Observable<Blob> {
+    return this.http.post(`${this.base}/render-pdf`, { html, fileName }, {
+      responseType: 'blob',
+    });
   }
 }
