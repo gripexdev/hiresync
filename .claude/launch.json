@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "hiresync-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start", "--", "--port", "4201", "--no-open"],
+      "port": 4201,
+      "cwd": "hiresync"
+    }
+  ]
+}

@@ -17,7 +17,8 @@
    - [4.4 Pipeline RabbitMQ (traitement asynchrone)](#44-pipeline-rabbitmq-traitement-asynchrone)
    - [4.5 Notifications WebSocket (STOMP)](#45-notifications-websocket-stomp)
    - [4.6 Consultation de l'historique des optimisations](#46-consultation-de-lhistorique-des-optimisations)
-   - [4.7 Frontend Angular — 9 pages](#47-frontend-angular--9-pages)
+   - [4.7 CV Studio — Template Designer & Export PDF](#47-cv-studio--template-designer--export-pdf)
+   - [4.8 Frontend Angular — 10 pages](#48-frontend-angular--10-pages)
 5. [Lancer le projet](#5-lancer-le-projet)
 6. [Endpoints API](#6-endpoints-api)
 7. [Variables de configuration](#7-variables-de-configuration)
@@ -364,7 +365,49 @@ ngOnInit() {
 
 ---
 
-### 4.7 Frontend Angular — 9 pages
+### 4.7 CV Studio — Template Designer & Export PDF
+
+**Ce qui a été ajouté :**
+- `cv-studio.component` — éditeur visuel de CV avec prévisualisation live côte-à-côte
+- `cv-templates.ts` — 3 templates prédéfinis : **Modern** (bleu), **Classic** (sobre), **Creative** (violet)
+- `CvPdfGenerator.java` — génération PDF vectoriel via Chrome headless (Playwright/CDP)
+- `PdfRenderService.java` — orchestre le rendu HTML → PDF avec `POST /api/cv/render-pdf`
+- `CvTextParser.java` — parse le texte extrait par PDFBox en sections structurées (JSON) pour préremplir le studio
+
+**Comment ça marche :**
+
+```
+Angular (CV Studio)              Spring Boot              Chrome headless
+       │                              │                         │
+       ├─ GET /api/cv/{id} ──────────►│                         │
+       │◄── {extractedText, sections}─┤                         │
+       │                              │                         │
+       │  Utilisateur choisit template│                         │
+       │  + édite champs + photo      │                         │
+       │                              │                         │
+       ├─ POST /api/cv/render-pdf ────►│                         │
+       │  {html, css, studioData}     ├─ lance Chrome ──────────►│
+       │                              │  page.setContent(html)  │
+       │                              │◄── PDF binaire ─────────┤
+       │◄── blob PDF ─────────────────┤                         │
+       │                              │                         │
+       │  browser.saveAs("cv.pdf")    │                         │
+```
+
+**Templates disponibles :**
+
+| Template | Style | Couleur accent |
+|----------|-------|----------------|
+| Modern | Barre latérale colorée, photo circulaire | Bleu (`#2563EB`) |
+| Classic | Mise en page sobre, ligne de séparation | Gris anthracite |
+| Creative | En-tête pleine largeur, typographie audacieuse | Violet (`#7C3AED`) |
+
+**Rebuild IA des sections :**
+Si le CV uploadé est mal parsé (texte brut non structuré), l'utilisateur peut cliquer "Rebuild with AI" — le studio envoie le texte brut à OpenRouter qui retourne un JSON structuré (`{name, email, experience[], skills[], education[]}`) pour préremplir automatiquement tous les champs.
+
+---
+
+### 4.8 Frontend Angular — 10 pages
 
 | Page | Route | Données |
 |------|-------|---------|
@@ -376,7 +419,8 @@ ngOnInit() {
 | Détail offre | `/jobs/:id` | Score de compatibilité, bouton "Optimiser CV" |
 | **Mon CV** | `/cv` | **RÉEL** — upload PDF, ATS réel, sections extraites, historique |
 | **Optimizer** | `/cv/optimize/:id` | **RÉEL** — loading IA animé, résultat Gemma 4, avant/après |
-| Candidatures | `/applications` | Kanban Kanban (mock data) |
+| **CV Studio** | `/cv/studio/:id` | **RÉEL** — template designer, photo, live preview, export PDF vectoriel |
+| Candidatures | `/applications` | Kanban (mock data) |
 | Notifications | `/notifications` | Mock data |
 
 > **Pages en gras = connectées au backend réel.**  
@@ -394,25 +438,42 @@ Tous les appels HTTP Angular ont automatiquement le header `Authorization: Beare
 - Docker Desktop (pour PostgreSQL + RabbitMQ)
 - Node.js 20+ et npm
 
-### Démarrage
+### Étape 1 — Configurer le backend
+
+```bash
+# Copier le template de configuration
+cp backend/src/main/resources/application.yml.example \
+   backend/src/main/resources/application.yml
+```
+
+Ouvrez `backend/src/main/resources/application.yml` et remplissez **ces deux valeurs** :
+
+| Champ | Comment l'obtenir |
+|-------|-------------------|
+| `hiresync.openrouter.api-key` | Créez un compte gratuit sur [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `hiresync.jwt.secret` | N'importe quelle chaîne aléatoire de 64+ caractères — ex: `openssl rand -base64 64` |
+
+Tout le reste (DB, RabbitMQ) est pré-rempli avec les valeurs du `docker-compose.yml` — **ne pas modifier**.
+
+### Étape 2 — Lancer les services
 
 ```bash
 # Terminal 1 — Infrastructure (PostgreSQL + RabbitMQ)
-cd HireSync/backend
+cd backend
 docker compose up -d
-
-# Vérifier que les services sont bien up :
-# PostgreSQL : localhost:5432
-# RabbitMQ   : localhost:15672  (user: hiresync / pass: hiresync123)
+# PostgreSQL  → localhost:5432
+# RabbitMQ UI → http://localhost:15672  (hiresync / hiresync123)
 
 # Terminal 2 — Backend Spring Boot
-cd HireSync/backend
-./mvnw spring-boot:run
+cd backend
+./mvnw spring-boot:run          # Linux/macOS
+.\mvnw.cmd spring-boot:run      # Windows
 # → http://localhost:8080
-# → Hibernate crée les tables automatiquement au premier démarrage
+# Hibernate crée les tables automatiquement au premier démarrage
 
 # Terminal 3 — Frontend Angular
-cd HireSync/hiresync
+cd hiresync
+npm install
 npm start -- --port 4201 --no-open
 # → http://localhost:4201
 ```
@@ -466,27 +527,20 @@ curl -H "Authorization: Bearer <token>" http://localhost:8080/api/cv/versions
 
 ## 7. Variables de configuration
 
-Fichier : `backend/src/main/resources/application.yml`
+La configuration du backend se fait dans un seul fichier : `backend/src/main/resources/application.yml`.
 
-```yaml
-hiresync:
-  jwt:
-    secret: "votre-secret-base64-64-chars-minimum"
-    expiration-ms: 86400000          # 24 heures
+Ce fichier est dans `.gitignore` — vous devez le créer à partir du template (voir Étape 1 ci-dessus).
 
-  openrouter:
-    api-key: "sk-or-v1-..."          # ⚠️ À mettre en variable d'env avant de pousser
-    model: "google/gemma-4-31b-it:free"
+**Valeurs à remplir obligatoirement :**
 
-  cv:
-    upload-dir: "./uploads/cvs"      # Dossier de stockage des PDFs uploadés
-```
+| Champ dans `application.yml` | Description | Où l'obtenir |
+|------------------------------|-------------|--------------|
+| `hiresync.openrouter.api-key` | Clé API LLM | [openrouter.ai/keys](https://openrouter.ai/keys) — compte gratuit |
+| `hiresync.jwt.secret` | Secret JWT (min. 64 chars) | N'importe quelle longue chaîne aléatoire |
 
-> **⚠️ Sécurité :** `application.yml` est dans `.gitignore` car il contient la clé API OpenRouter. Avant de le partager ou de l'exposer, déplacez la clé dans une variable d'environnement :
-> ```bash
-> export OPENROUTER_API_KEY=sk-or-v1-...
-> ```
-> Et dans `application.yml` remplacez par `"${OPENROUTER_API_KEY}"`.
+**Tout le reste est pré-rempli** dans `application.yml.example` et fonctionne tel quel avec `docker compose up -d`.
+
+> Le fichier `backend/.env.example` est une alternative pour les développeurs qui préfèrent injecter la config via des variables d'environnement système (CI/CD, production).
 
 ---
 

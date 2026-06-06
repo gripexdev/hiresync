@@ -11,14 +11,16 @@ backend/*.log
 
 # ── Environment / secrets ─────────────────────────────────────────────────────
 .env
+backend/.env
 .env.*
 !.env.example
+!backend/.env.example
 application-local.properties
 application-local.yml
-
-# ── Backend secrets (remove the API key from application.yml before committing) ──
-# Reminder: move hiresync.openrouter.api-key to an env var in prod
+# application.yml contains real secrets — never commit it
+# use application.yml.example as the template
 backend/src/main/resources/application.yml
+!backend/src/main/resources/application.yml.example
 
 # ── CV uploads (binary files, not for git) ────────────────────────────────────
 backend/uploads/

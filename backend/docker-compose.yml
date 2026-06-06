@@ -36,5 +36,36 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Spring Boot Backend ───────────────────────────────────────────────────
+  backend:
+    build: .
+    container_name: hiresync-backend
+    ports:
+      - "8080:8080"
+    environment:
+      # Use container names for internal Docker networking
+      DB_URL:             jdbc:postgresql://hiresync-postgres:5432/hiresync
+      DB_USER:            hiresync
+      DB_PASS:            hiresync123
+      RABBITMQ_HOST:      hiresync-rabbitmq
+      RABBITMQ_PORT:      5672
+      RABBITMQ_USER:      hiresync
+      RABBITMQ_PASS:      hiresync123
+      # Secrets — read from backend/.env (copy .env.example → .env and fill in)
+      JWT_SECRET:         ${JWT_SECRET}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL:   ${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}
+    volumes:
+      - cv_uploads:/app/uploads/cvs
+      - playwright_cache:/root/.cache/ms-playwright   # persists Chromium download across restarts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure
+
 volumes:
   postgres_data:
+  cv_uploads:
+  playwright_cache:

@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HireSync — Backend Configuration Template
+#
+# 1. Copy this file: cp application.yml.example application.yml
+# 2. Fill in the two REQUIRED values marked with  ← REQUIRED
+# 3. Leave everything else as-is for local development with docker-compose
+# ─────────────────────────────────────────────────────────────────────────────
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: hiresync-backend
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  # Matches the docker-compose.yml defaults — no change needed for local dev
+  datasource:
+    url: jdbc:postgresql://localhost:5432/hiresync
+    username: hiresync
+    password: hiresync123
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  # ── RabbitMQ ───────────────────────────────────────────────────────────────
+  # Matches the docker-compose.yml defaults — no change needed for local dev
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: hiresync
+    password: hiresync123
+
+  # ── File upload limits ─────────────────────────────────────────────────────
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# ── App-specific config ────────────────────────────────────────────────────
+hiresync:
+  jwt:
+    # ← REQUIRED: any random string of at least 64 characters
+    # Generate one with: openssl rand -base64 64
+    secret: "REPLACE_WITH_64_CHAR_RANDOM_STRING_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    expiration-ms: 86400000    # 24 hours
+
+  openrouter:
+    # ← REQUIRED: get a free key at https://openrouter.ai/keys
+    api-key: "sk-or-v1-REPLACE_WITH_YOUR_KEY"
+    base-url: "https://openrouter.ai/api/v1"
+    # Primary model — free tier, good quality
+    model: "google/gemma-4-31b-it:free"
+    # Fallback chain if primary is rate-limited
+    fallback-models:
+      - "meta-llama/llama-3.3-70b-instruct:free"
+      - "qwen/qwen3-next-80b-a3b-instruct:free"
+      - "nvidia/nemotron-3-super-120b-a12b:free"
+
+  cv:
+    upload-dir: "./uploads/cvs"
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+cors:
+  allowed-origins: "http://localhost:4200,http://localhost:4201"
+
+# ── Actuator ──────────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
