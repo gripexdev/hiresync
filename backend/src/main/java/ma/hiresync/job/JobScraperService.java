@@ -9,7 +9,9 @@ import org.jsoup.select.Elements;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,75 +20,156 @@ import java.util.List;
 @Slf4j
 public class JobScraperService {
 
-    // ── Rekrut.ma selectors ──────────────────────────────────────────────────
-    // Adjust these constants if the site updates its HTML structure
-    private static final String SOURCE       = "rekrut.ma";
-    private static final String BASE_URL     = "https://www.rekrut.ma";
-    private static final String LISTINGS_URL = BASE_URL + "/offres-emploi";
+    private static final String SOURCE    = "rekrute.com";
+    private static final String BASE_URL  = "https://www.rekrute.com";
 
-    private static final String CARD_SEL     = "div.job-item, div.offer-item, article.job-card, div[class*='offer']";
-    private static final String TITLE_SEL    = "h2, h3, .job-title, .offer-title, [class*='title']";
-    private static final String COMPANY_SEL  = ".company, .employer, .company-name, [class*='company']";
-    private static final String LOCATION_SEL = ".location, .city, [class*='location'], [class*='ville']";
-    private static final String CONTRACT_SEL = ".contract, .type, [class*='contract'], [class*='contrat']";
-    private static final String LINK_SEL     = "a[href]";
+    // Page 1 — Morocco-specific listing
+    private static final String PAGE1_URL = BASE_URL + "/offres-emploi-maroc.html";
+    // Pages 2+ — paginated (s=1 → 10/page, o=1 → newest first)
+    private static final String PAGE_N_URL = BASE_URL + "/offres.html?s=1&p=%d&o=1";
+
+    // How many pages to scrape per trigger (10 jobs per page)
+    private static final int MAX_PAGES = 3;
 
     private final JobRepository jobRepository;
 
+    // ── Public entry point ────────────────────────────────────────────────────
+
     public int scrape() {
-        log.info("Scraping jobs from {}", LISTINGS_URL);
-        Document doc;
-        try {
-            doc = Jsoup.connect(LISTINGS_URL)
-                    .userAgent("Mozilla/5.0 (compatible; HireSync-Bot/1.0)")
-                    .timeout(15_000)
-                    .get();
-        } catch (IOException e) {
-            log.error("Failed to fetch {}: {}", LISTINGS_URL, e.getMessage());
-            return 0;
+        int totalSaved = 0;
+        for (int page = 1; page <= MAX_PAGES; page++) {
+            String url = (page == 1) ? PAGE1_URL : String.format(PAGE_N_URL, page);
+            log.info("Scraping rekrute.com page {} → {}", page, url);
+            try {
+                Document doc = Jsoup.connect(url)
+                        .userAgent("Mozilla/5.0 (compatible; HireSync-Bot/1.0; +https://hiresync.ma)")
+                        .referrer("https://www.rekrute.com")
+                        .timeout(15_000)
+                        .get();
+                int saved = parsePage(doc);
+                totalSaved += saved;
+                log.info("Page {}: {} new jobs saved", page, saved);
+            } catch (IOException e) {
+                log.error("Failed to fetch page {}: {}", page, e.getMessage());
+                break;
+            }
         }
+        log.info("Scrape finished — {} new jobs total", totalSaved);
+        return totalSaved;
+    }
 
-        Elements cards = doc.select(CARD_SEL);
-        log.info("Found {} job cards on page", cards.size());
+    // ── Page parser ───────────────────────────────────────────────────────────
 
+    private int parsePage(Document doc) {
+        // Each job is: <li class="post-id" id="183362">
+        Elements cards = doc.select("li.post-id");
         if (cards.isEmpty()) {
-            // Log a snippet so selectors can be adjusted without redeploying
-            log.warn("No cards matched '{}'. Page title: '{}'. First 500 chars of body: {}",
-                    CARD_SEL, doc.title(), doc.body().text().substring(0, Math.min(500, doc.body().text().length())));
+            log.warn("No job cards found on page '{}'. First 300 chars: {}",
+                    doc.title(),
+                    doc.body().text().substring(0, Math.min(300, doc.body().text().length())));
+            return 0;
         }
 
         List<Job> toSave = new ArrayList<>();
         for (Element card : cards) {
-            String url = resolveUrl(card.selectFirst(LINK_SEL));
-            if (url == null || jobRepository.existsBySourceUrl(url)) continue;
+
+            // ── Source URL (dedup key) ─────────────────────────────────────
+            Element titleLink = card.selectFirst("a.titreJob");
+            if (titleLink == null) continue;
+            String path = titleLink.attr("href").trim();
+            if (path.isEmpty()) continue;
+            String sourceUrl = path.startsWith("http") ? path : BASE_URL + path;
+            if (jobRepository.existsBySourceUrl(sourceUrl)) continue;
+
+            // ── Title + Location ───────────────────────────────────────────
+            // Format: "Chargé(e) d´assistance francophone | Casablanca (Maroc)"
+            String fullText = titleLink.text().trim();
+            String title    = fullText;
+            String location = null;
+            int pipe = fullText.lastIndexOf(" | ");
+            if (pipe > 0) {
+                title    = fullText.substring(0, pipe).trim();
+                location = fullText.substring(pipe + 3)
+                        .replaceAll("\\s*\\([^)]*\\)\\s*$", "")  // remove "(Maroc)"
+                        .trim();
+            }
+
+            // ── Company + Logo ─────────────────────────────────────────────
+            // <img class="photo" src="/rekrute/file/jobOfferLogo/..." alt="Company Name">
+            // Confidential: src contains "confidentiel", alt is empty
+            String company = null;
+            String logoUrl  = null;
+            Element logoImg = card.selectFirst("img.photo");
+            if (logoImg != null) {
+                String src = logoImg.attr("src");
+                String alt = logoImg.attr("alt").trim();
+                if (!src.contains("confidentiel") && !alt.isEmpty()) {
+                    company = alt;
+                    String postId = card.id(); // li id="183362"
+                    if (!postId.isEmpty()) {
+                        logoUrl = BASE_URL + "/rekrute/file/jobOfferLogo/jobOfferId/" + postId;
+                    }
+                }
+            }
+
+            // ── Description (AI summary inside first div.info > span) ──────
+            // <div class="info" style="margin:..."><img .../><span>Description...</span></div>
+            String description = null;
+            for (Element info : card.select("div.info")) {
+                Element span = info.selectFirst("span");
+                if (span != null && !span.text().trim().isEmpty()) {
+                    description = span.text().trim();
+                    break;
+                }
+            }
+
+            // ── Publication date: <em class="date"><span>06/06/2026</span> ─
+            LocalDateTime postedAt = null;
+            Element dateSpan = card.selectFirst("em.date span");
+            if (dateSpan != null) {
+                postedAt = parseDate(dateSpan.text().trim());
+            }
+
+            // ── Metadata from the info <ul> ────────────────────────────────
+            String contractType   = firstLinkText(card, "a[href*='contractType']");
+            String sector         = firstLinkText(card, "a[href*='sectorId']");
+            String experienceLevel= firstLinkText(card, "a[href*='workExperienceId']");
 
             toSave.add(Job.builder()
-                    .title(text(card, TITLE_SEL, "N/A"))
-                    .company(text(card, COMPANY_SEL, null))
-                    .location(text(card, LOCATION_SEL, null))
-                    .contractType(text(card, CONTRACT_SEL, null))
-                    .sourceUrl(url)
+                    .title(title)
+                    .company(company)
+                    .location(location)
+                    .contractType(contractType)
+                    .sector(sector)
+                    .experienceLevel(experienceLevel)
+                    .description(description)
+                    .logoUrl(logoUrl)
+                    .sourceUrl(sourceUrl)
                     .source(SOURCE)
+                    .postedAt(postedAt)
                     .scrapedAt(LocalDateTime.now())
                     .build());
         }
 
         jobRepository.saveAll(toSave);
-        log.info("Saved {} new jobs from {}", toSave.size(), SOURCE);
         return toSave.size();
     }
 
-    private String resolveUrl(Element anchor) {
-        if (anchor == null) return null;
-        String href = anchor.attr("href").trim();
-        if (href.isEmpty()) return null;
-        return href.startsWith("http") ? href : BASE_URL + href;
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private String firstLinkText(Element parent, String selector) {
+        Element el = parent.selectFirst(selector);
+        if (el == null) return null;
+        String t = el.text().trim();
+        return t.isEmpty() ? null : t;
     }
 
-    private String text(Element parent, String selector, String fallback) {
-        Element el = parent.selectFirst(selector);
-        if (el == null) return fallback;
-        String t = el.text().trim();
-        return t.isEmpty() ? fallback : t;
+    /** Parse "06/06/2026" → LocalDateTime (midnight) */
+    private LocalDateTime parseDate(String raw) {
+        try {
+            return LocalDate.parse(raw, DateTimeFormatter.ofPattern("dd/MM/yyyy")).atStartOfDay();
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

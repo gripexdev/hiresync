@@ -26,14 +26,21 @@ public class Job {
     String company;
     String location;
     String contractType;
+    String sector;
+    String experienceLevel;
 
     @Column(columnDefinition = "TEXT")
     String description;
+
+    @Column(length = 512)
+    String logoUrl;
 
     @Column(unique = true, nullable = false, length = 1024)
     String sourceUrl;
 
     String source;
+
+    LocalDateTime postedAt;
 
     @Column(nullable = false)
     LocalDateTime scrapedAt;
