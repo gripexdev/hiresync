@@ -8,6 +8,7 @@ import { Job, JobSearchParams, JobSearchResult } from '../models/job.model';
 interface SpringPage<T> {
   content: T[];
   totalElements: number;
+  totalPages: number;
   number: number;
   size: number;
 }
@@ -28,6 +29,7 @@ export class JobService {
       map(page => ({
         jobs: page.content.map(j => ({ ...j, postedAt: j.postedAt ?? j.scrapedAt })),
         total: page.totalElements,
+        totalPages: page.totalPages,
         page: page.number,
         size: page.size,
       }))

@@ -34,6 +34,7 @@ export interface JobSearchParams {
 export interface JobSearchResult {
   jobs: Job[];
   total: number;
+  totalPages: number;
   page: number;
   size: number;
 }

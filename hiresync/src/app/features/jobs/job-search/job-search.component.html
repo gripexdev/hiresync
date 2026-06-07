@@ -106,5 +106,43 @@
         </div>
       }
     }
+
+    <!-- Pagination -->
+    @if (!loading() && totalPages() > 1) {
+      <nav class="pagination" aria-label="Navigation des pages">
+        <span class="pagination__info">
+          Offres {{ rangeStart() }}–{{ rangeEnd() }} sur {{ total() }}
+        </span>
+
+        <div class="pagination__controls">
+          <button class="page-btn page-btn--nav"
+                  [disabled]="currentPage() === 0"
+                  (click)="goToPage(currentPage() - 1)"
+                  aria-label="Page précédente">
+            <mat-icon>chevron_left</mat-icon>
+          </button>
+
+          @for (p of visiblePages(); track $index) {
+            @if (p === null) {
+              <span class="page-ellipsis">…</span>
+            } @else {
+              <button class="page-btn"
+                      [class.page-btn--active]="p === currentPage()"
+                      (click)="goToPage(p)"
+                      [attr.aria-current]="p === currentPage() ? 'page' : null">
+                {{ p + 1 }}
+              </button>
+            }
+          }
+
+          <button class="page-btn page-btn--nav"
+                  [disabled]="currentPage() === totalPages() - 1"
+                  (click)="goToPage(currentPage() + 1)"
+                  aria-label="Page suivante">
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+        </div>
+      </nav>
+    }
   </div>
 </div>
