@@ -1,18 +1,20 @@
 export interface Job {
   id: string;
   title: string;
-  company: string;
-  location: string;
-  contractType: ContractType;
-  sector: string;
-  experienceLevel: ExperienceLevel;
+  company: string | null;
+  location: string | null;
+  contractType: ContractType | null;
+  sector?: string;
+  experienceLevel?: ExperienceLevel;
   salary?: string;
-  description: string;
-  requirements: string[];
-  postedAt: string;
+  description?: string | null;
+  requirements?: string[];
+  postedAt?: string;
+  scrapedAt?: string;
   matchScore?: number;
   logoUrl?: string;
   source: string;
+  sourceUrl?: string;
   applyUrl?: string;
 }
 

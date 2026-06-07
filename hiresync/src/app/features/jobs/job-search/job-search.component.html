@@ -74,7 +74,7 @@
       @for (job of jobs(); track job.id) {
         <div class="job-card hs-card" [routerLink]="'/jobs/' + job.id">
           <div class="job-card__header">
-            <img [src]="job.logoUrl" [alt]="job.company" class="job-card__logo" />
+            @if (job.logoUrl) { <img [src]="job.logoUrl" [alt]="job.company" class="job-card__logo" /> }
             <div class="job-card__main">
               <h3 class="job-card__title">{{ job.title }}</h3>
               <span class="job-card__company">{{ job.company }}</span>
@@ -90,14 +90,14 @@
           <div class="job-card__tags">
             <span class="tag tag--location"><mat-icon>location_on</mat-icon>{{ job.location }}</span>
             <span class="tag tag--contract">{{ job.contractType }}</span>
-            <span class="tag tag--level">{{ job.experienceLevel }}</span>
+            @if (job.experienceLevel) { <span class="tag tag--level">{{ job.experienceLevel }}</span> }
             @if (job.salary) { <span class="tag tag--salary">{{ job.salary }}</span> }
           </div>
 
           <p class="job-card__desc">{{ job.description | slice:0:160 }}…</p>
 
           <div class="job-card__footer">
-            <span class="job-card__date"><mat-icon>schedule</mat-icon>{{ timeAgo(job.postedAt) }}</span>
+            @if (job.postedAt) { <span class="job-card__date"><mat-icon>schedule</mat-icon>{{ timeAgo(job.postedAt) }}</span> }
             <span class="job-card__source">via {{ job.source }}</span>
             <button class="hs-btn-primary job-card__cta" (click)="$event.stopPropagation()">
               <mat-icon>open_in_new</mat-icon> Voir l'offre

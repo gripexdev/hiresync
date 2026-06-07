@@ -7,6 +7,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
 import java.util.Map;
 
 @RestController
@@ -25,6 +27,14 @@ public class JobController {
             @RequestParam(defaultValue = "20") int size
     ) {
         return jobRepository.search(q, PageRequest.of(page, size, Sort.by("scrapedAt").descending()));
+    }
+
+    /** GET /api/jobs/{id} */
+    @GetMapping("/jobs/{id}")
+    public ResponseEntity<Job> getById(@PathVariable UUID id) {
+        return jobRepository.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     /** POST /api/admin/scrape/trigger — requires auth, runs scraper synchronously */

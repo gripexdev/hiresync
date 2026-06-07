@@ -14,7 +14,7 @@
         <!-- Header card -->
         <div class="hs-card detail-header">
           <div class="detail-header__top">
-            <img [src]="job.logoUrl" [alt]="job.company" class="detail-header__logo" />
+            @if (job.logoUrl) { <img [src]="job.logoUrl" [alt]="job.company" class="detail-header__logo" /> }
             <div class="detail-header__info">
               <h1>{{ job.title }}</h1>
               <div class="detail-header__meta">
@@ -51,14 +51,16 @@
         </div>
 
         <!-- Requirements -->
-        <div class="hs-card detail-section">
-          <h2><mat-icon>checklist</mat-icon> Compétences requises</h2>
-          <div class="skills-grid">
-            @for (req of job.requirements; track req) {
-              <span class="skill-chip">{{ req }}</span>
-            }
+        @if (job.requirements?.length) {
+          <div class="hs-card detail-section">
+            <h2><mat-icon>checklist</mat-icon> Compétences requises</h2>
+            <div class="skills-grid">
+              @for (req of job.requirements!; track req) {
+                <span class="skill-chip">{{ req }}</span>
+              }
+            </div>
           </div>
-        </div>
+        }
       </div>
 
       <!-- Sidebar -->
@@ -96,10 +98,10 @@
           <h3><mat-icon>info</mat-icon> Détails du poste</h3>
           <div class="info-rows">
             <div class="info-row"><mat-icon>work</mat-icon><span>{{ job.contractType }}</span></div>
-            <div class="info-row"><mat-icon>trending_up</mat-icon><span>{{ job.experienceLevel }}</span></div>
-            <div class="info-row"><mat-icon>category</mat-icon><span>{{ job.sector }}</span></div>
+            @if (job.experienceLevel) { <div class="info-row"><mat-icon>trending_up</mat-icon><span>{{ job.experienceLevel }}</span></div> }
+            @if (job.sector) { <div class="info-row"><mat-icon>category</mat-icon><span>{{ job.sector }}</span></div> }
             <div class="info-row"><mat-icon>source</mat-icon><span>Source : {{ job.source }}</span></div>
-            <div class="info-row"><mat-icon>schedule</mat-icon><span>Publié le {{ job.postedAt | date:'dd/MM/yyyy' }}</span></div>
+            @if (job.postedAt) { <div class="info-row"><mat-icon>schedule</mat-icon><span>Publié le {{ job.postedAt | date:'dd/MM/yyyy' }}</span></div> }
           </div>
         </div>
 
@@ -110,7 +112,7 @@
             <div class="similar-jobs">
               @for (j of similar(); track j.id) {
                 <a class="similar-job" [routerLink]="'/jobs/' + j.id">
-                  <img [src]="j.logoUrl" [alt]="j.company" class="similar-job__logo" />
+                  @if (j.logoUrl) { <img [src]="j.logoUrl" [alt]="j.company" class="similar-job__logo" /> }
                   <div class="similar-job__info">
                     <span class="similar-job__title">{{ j.title }}</span>
                     <span class="similar-job__co">{{ j.company }}</span>

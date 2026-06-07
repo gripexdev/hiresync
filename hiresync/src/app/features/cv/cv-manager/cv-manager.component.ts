@@ -131,8 +131,8 @@ export class CvManagerComponent implements OnInit {
       cvId: cv.id,
       jobId: job.id,
       jobTitle: job.title,
-      company: job.company,
-      jobDescription: `${job.title} chez ${job.company} — ${job.location}. ${job.description} Compétences: ${job.requirements?.join(', ')}`,
+      company: job.company ?? '',
+      jobDescription: `${job.title} chez ${job.company ?? ''} — ${job.location ?? ''}. ${job.description ?? ''} Compétences: ${job.requirements?.join(', ') ?? ''}`,
     }).subscribe({
       next: res => {
         this.snack.open(
