@@ -41,6 +41,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // Job listings are public — anyone can browse without logging in
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/jobs", "/api/jobs/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authProvider())

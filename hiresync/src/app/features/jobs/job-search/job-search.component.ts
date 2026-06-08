@@ -2,6 +2,7 @@ import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { ReactiveFormsModule, FormBuilder } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -9,28 +10,38 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { debounceTime, distinctUntilChanged } from 'rxjs';
 import { JobService } from '../../../core/services/job.service';
+import { AuthService } from '../../../core/auth/auth.service';
 import { Job, ContractType, ExperienceLevel } from '../../../core/models/job.model';
+import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-job-search',
   standalone: true,
   imports: [CommonModule, RouterModule, ReactiveFormsModule, MatFormFieldModule,
     MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatChipsModule,
-    MatProgressSpinnerModule],
+    MatProgressSpinnerModule, MatSnackBarModule],
   templateUrl: './job-search.component.html',
   styleUrls: ['./job-search.component.scss'],
 })
 export class JobSearchComponent implements OnInit {
-  private fb  = inject(FormBuilder);
-  private svc = inject(JobService);
+  private fb    = inject(FormBuilder);
+  private svc   = inject(JobService);
+  private http  = inject(HttpClient);
+  private snack = inject(MatSnackBar);
+  auth          = inject(AuthService);
 
   jobs        = signal<Job[]>([]);
   total       = signal(0);
   loading     = signal(true);
   currentPage = signal(0);
   totalPages  = signal(0);
+
+  // Admin toolbar state
+  scraping  = signal(false);
+  enriching = signal(false);
 
   readonly PAGE_SIZE = 10;
 
@@ -41,7 +52,6 @@ export class JobSearchComponent implements OnInit {
   readonly rangeStart = computed(() => this.currentPage() * this.PAGE_SIZE + 1);
   readonly rangeEnd   = computed(() => this.currentPage() * this.PAGE_SIZE + this.jobs().length);
 
-  // Array of page numbers (or null for ellipsis) to render in the pagination bar
   readonly visiblePages = computed((): (number | null)[] => {
     const total = this.totalPages();
     const cur   = this.currentPage();
@@ -96,6 +106,42 @@ export class JobSearchComponent implements OnInit {
   }
 
   clearFilters(): void { this.filters.reset(); }
+
+  // ── Admin actions ─────────────────────────────────────────────────────────
+
+  triggerScrape(): void {
+    this.scraping.set(true);
+    this.http.post<any>(`${environment.apiUrl}/admin/scrape/trigger`, {}).subscribe({
+      next: r => {
+        this.scraping.set(false);
+        this.snack.open(`✅ ${r.newJobsSaved} nouvelles offres scraped (total: ${r.totalJobsInDb})`, 'OK', { duration: 4000 });
+        this.currentPage.set(0);
+        this._search();
+      },
+      error: () => {
+        this.scraping.set(false);
+        this.snack.open('❌ Erreur lors du scraping', 'OK', { duration: 3000 });
+      },
+    });
+  }
+
+  triggerEnrich(): void {
+    this.enriching.set(true);
+    this.http.post<any>(`${environment.apiUrl}/admin/enrich/trigger`, {}).subscribe({
+      next: r => {
+        this.enriching.set(false);
+        const msg = r.enrichedLeft > 0
+          ? `✅ ${r.enrichedThisRun} offres enrichies — encore ${r.enrichedLeft} à enrichir`
+          : `✅ ${r.enrichedThisRun} offres enrichies — tout est à jour !`;
+        this.snack.open(msg, 'OK', { duration: 5000 });
+        this._search();  // refresh to show new descriptions
+      },
+      error: () => {
+        this.enriching.set(false);
+        this.snack.open('❌ Erreur lors de l\'enrichissement', 'OK', { duration: 3000 });
+      },
+    });
+  }
 
   matchClass(score?: number): string {
     if (!score) return '';

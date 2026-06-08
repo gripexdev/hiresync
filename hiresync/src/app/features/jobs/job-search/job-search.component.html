@@ -3,6 +3,27 @@
   <p>{{ total() }} offres trouvées sur le marché marocain</p>
 </div>
 
+<!-- Admin toolbar — visible only when logged in -->
+@if (auth.isLoggedIn()) {
+  <div class="admin-bar">
+    <span class="admin-bar__label"><mat-icon>admin_panel_settings</mat-icon> Admin</span>
+    <button class="admin-btn"
+            [disabled]="scraping()"
+            (click)="triggerScrape()">
+      @if (scraping()) { <mat-spinner diameter="14" /> }
+      @else { <mat-icon>cloud_download</mat-icon> }
+      Scraper rekrute.com
+    </button>
+    <button class="admin-btn admin-btn--enrich"
+            [disabled]="enriching()"
+            (click)="triggerEnrich()">
+      @if (enriching()) { <mat-spinner diameter="14" /> }
+      @else { <mat-icon>auto_fix_high</mat-icon> }
+      Enrichir descriptions
+    </button>
+  </div>
+}
+
 <div class="job-layout">
   <!-- Filter sidebar -->
   <aside class="filter-sidebar hs-card">

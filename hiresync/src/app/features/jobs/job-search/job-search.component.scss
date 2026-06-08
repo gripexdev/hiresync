@@ -1,5 +1,47 @@
 $primary: #2E86AB; $accent: #17A589;
 
+// ── Admin toolbar ──────────────────────────────────────────────────────────────
+.admin-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  background: #FFF7ED;
+  border: 1px dashed #F59E0B;
+  border-radius: 10px;
+  font-size: 13px;
+
+  &__label {
+    display: flex; align-items: center; gap: 4px;
+    font-weight: 700; color: #B45309;
+    mat-icon { font-size: 16px; width: 16px; height: 16px; }
+  }
+}
+
+.admin-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid #F59E0B;
+  border-radius: 8px;
+  background: #fff;
+  color: #92400E;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  mat-icon { font-size: 14px; width: 14px; height: 14px; }
+
+  &:hover:not(:disabled) { background: #FEF3C7; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  &--enrich {
+    border-color: #A78BFA;
+    color: #5B21B6;
+    &:hover:not(:disabled) { background: #EDE9FE; }
+  }
+}
+
 .job-layout {
   display: grid;
   grid-template-columns: 280px 1fr;

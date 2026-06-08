@@ -16,8 +16,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class JobController {
 
-    private final JobRepository    jobRepository;
-    private final JobScraperService scraper;
+    private final JobRepository      jobRepository;
+    private final JobScraperService  scraper;
+    private final JobEnrichmentService enricher;
 
     /** GET /api/jobs?q=&page=0&size=20 */
     @GetMapping("/jobs")
@@ -37,7 +38,7 @@ public class JobController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    /** POST /api/admin/scrape/trigger — requires auth, runs scraper synchronously */
+    /** POST /api/admin/scrape/trigger — runs scraper synchronously */
     @PostMapping("/admin/scrape/trigger")
     public ResponseEntity<Map<String, Object>> trigger() {
         int saved = scraper.scrape();
@@ -45,6 +46,23 @@ public class JobController {
         return ResponseEntity.ok(Map.of(
                 "newJobsSaved", saved,
                 "totalJobsInDb", total
+        ));
+    }
+
+    /**
+     * POST /api/admin/enrich/trigger
+     * Fetches detail pages for up to 20 unenriched jobs and fills in
+     * full description + requirements. Call repeatedly until enrichedLeft = 0.
+     */
+    @PostMapping("/admin/enrich/trigger")
+    public ResponseEntity<Map<String, Object>> triggerEnrich() {
+        int enriched     = enricher.enrich();
+        long totalDone   = jobRepository.countByEnrichedTrue();
+        long totalJobs   = jobRepository.count();
+        return ResponseEntity.ok(Map.of(
+                "enrichedThisRun", enriched,
+                "totalEnriched",   totalDone,
+                "enrichedLeft",    totalJobs - totalDone
         ));
     }
 }
