@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -13,6 +15,7 @@ import java.util.stream.Collectors;
 /**
  * Fetches each job's detail page (sourceUrl) and fills in:
  *   - description  → "Poste :" section + "Profil recherché :" section
+ *                     paragraphs preserved with \n\n, <br> items with \n
  *   - requirements → span.tagSkills items (skills / personality traits)
  *
  * Called via POST /api/admin/enrich/trigger — processes up to 20 jobs per call.
@@ -42,14 +45,16 @@ public class JobEnrichmentService {
                 enrichOne(job);
                 count++;
             } catch (Exception e) {
-                log.warn("Enrichment failed for job {} ({}): {}", job.getId(), job.getSourceUrl(), e.getMessage());
-                // Mark enriched anyway so we don't retry a dead URL forever
+                log.warn("Enrichment failed for job {} ({}): {}",
+                        job.getId(), job.getSourceUrl(), e.getMessage());
+                // Mark enriched anyway so we don't retry a permanently broken URL
                 job.setEnriched(true);
                 jobRepository.save(job);
             }
 
-            // Polite delay between requests
-            try { Thread.sleep(400); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+            try { Thread.sleep(400); } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt(); break;
+            }
         }
 
         log.info("Enrichment pass complete — {} jobs enriched", count);
@@ -68,8 +73,8 @@ public class JobEnrichmentService {
                 .get();
 
         // ── Description: merge "Poste :" and "Profil recherché :" sections ──
-        String poste   = extractSection(doc, "Poste");
-        String profil  = extractSection(doc, "Profil");
+        String poste  = extractSection(doc, "Poste");
+        String profil = extractSection(doc, "Profil");
 
         String description = null;
         if (poste != null && profil != null) {
@@ -98,23 +103,55 @@ public class JobEnrichmentService {
                 requirements.size());
     }
 
-    // ── HTML helpers ──────────────────────────────────────────────────────────
+    // ── HTML → structured text helpers ───────────────────────────────────────
 
     /**
      * Finds a {@code div.blc} whose {@code <h2>} text contains {@code headingKeyword},
-     * strips the h2, and returns the remaining text.
-     * Matches: "Poste :", "Profil recherché :", "Entreprise :", etc.
+     * then converts each child {@code <p>} to a paragraph (joined with \n\n).
+     * Inside each paragraph, {@code <br>} tags become \n so bullet items stay separate.
      */
     private String extractSection(Document doc, String headingKeyword) {
         for (Element blc : doc.select("div.blc")) {
             Element h2 = blc.selectFirst("h2");
             if (h2 != null && h2.ownText().trim().contains(headingKeyword)) {
-                Element clone = blc.clone();
-                clone.select("h2").remove();
-                String text = clone.text().trim();
-                return text.isEmpty() ? null : text;
+                StringBuilder sb = new StringBuilder();
+                for (Element child : blc.children()) {
+                    if (child.tagName().equals("h2")) continue;
+                    String text = nodeToText(child).trim();
+                    // Collapse multiple internal spaces but keep intentional newlines
+                    text = text.replaceAll("[ \\t]+", " ")
+                               .replaceAll(" \\n", "\n")
+                               .replaceAll("\\n ", "\n")
+                               .replaceAll("\\n{3,}", "\n\n")
+                               .trim();
+                    if (!text.isEmpty()) sb.append(text).append("\n\n");
+                }
+                String result = sb.toString()
+                        .replaceAll("\\n{3,}", "\n\n")
+                        .trim();
+                return result.isEmpty() ? null : result;
             }
         }
         return null;
+    }
+
+    /**
+     * Recursively converts an element to plain text, turning {@code <br>} into \n
+     * and joining child element text without adding extra spaces.
+     */
+    private String nodeToText(Node node) {
+        StringBuilder sb = new StringBuilder();
+        for (Node child : node.childNodes()) {
+            if (child instanceof TextNode) {
+                sb.append(((TextNode) child).text());
+            } else if (child instanceof Element el) {
+                if (el.tagName().equalsIgnoreCase("br")) {
+                    sb.append("\n");
+                } else {
+                    sb.append(nodeToText(el));
+                }
+            }
+        }
+        return sb.toString();
     }
 }

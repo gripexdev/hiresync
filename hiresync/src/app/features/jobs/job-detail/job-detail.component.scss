@@ -70,20 +70,112 @@ $primary: #2E86AB; $accent: #17A589;
 .detail-section {
   padding: 20px;
 
-  h2 {
+  > h2 {
     display: flex; align-items: center; gap: 8px;
-    font-size: 15px; font-weight: 700; color: #1A202C; margin: 0 0 14px;
+    font-size: 15px; font-weight: 700; color: #1A202C; margin: 0 0 18px;
     mat-icon { font-size: 18px; width: 18px; height: 18px; color: $primary; }
   }
 }
 
-.detail-desc { font-size: 14px; color: #475569; line-height: 1.8; margin: 0; }
+// ── Structured description ─────────────────────────────────────────────────────
+.desc-body {
+  display: flex;
+  flex-direction: column;
+}
 
+.desc-divider {
+  height: 1px;
+  background: linear-gradient(to right, #E2E8F0 60%, transparent);
+  margin: 20px 0;
+}
+
+.desc-section {
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    padding-left: 10px;
+    border-left: 3px solid var(--accent, #{$primary});
+
+    mat-icon {
+      font-size: 16px; width: 16px; height: 16px;
+      color: var(--accent, #{$primary});
+    }
+    span {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1A202C;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+  }
+
+  &__content {
+    padding-left: 13px; // aligns with text after the border
+  }
+}
+
+.desc-para {
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.85;
+  margin: 0 0 10px;
+  &:last-child { margin-bottom: 0; }
+}
+
+.desc-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+
+  li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+    color: #475569;
+    line-height: 1.65;
+
+    &::before {
+      content: '';
+      flex-shrink: 0;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: $primary;
+      margin-top: 7px;  // optical alignment with first line of text
+    }
+  }
+
+  &:last-child { margin-bottom: 0; }
+}
+
+// Fallback for un-enriched jobs (flat text)
+.detail-desc { font-size: 14px; color: #475569; line-height: 1.85; margin: 0; }
+
+// ── Skills / Traits ────────────────────────────────────────────────────────────
 .skills-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+
 .skill-chip {
-  padding: 5px 12px; border-radius: 8px;
-  background: #EBF5FA; color: $primary;
-  font-size: 13px; font-weight: 500; border: 1px solid rgba(46,134,171,.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: #F0FDF9;
+  color: #0D9488;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid rgba(23,165,137,.25);
+  transition: background 0.15s;
+
+  mat-icon { font-size: 13px; width: 13px; height: 13px; }
+
+  &:hover { background: #CCFBF1; }
 }
 
 // ── Sidebar cards ──────────────────────────────────────────────────────────────

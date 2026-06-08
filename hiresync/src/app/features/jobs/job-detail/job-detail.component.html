@@ -44,19 +44,53 @@
           </div>
         </div>
 
-        <!-- Description -->
+        <!-- Description — structured sections -->
         <div class="hs-card detail-section">
           <h2><mat-icon>description</mat-icon> Description du poste</h2>
-          <p class="detail-desc">{{ job.description }}</p>
+
+          @if (parsedDesc().length > 0) {
+            <div class="desc-body">
+              @for (section of parsedDesc(); track section.title; let last = $last) {
+                <div class="desc-section">
+                  <!-- Section header with colored accent bar -->
+                  <div class="desc-section__header" [style.--accent]="section.color">
+                    <mat-icon>{{ section.icon }}</mat-icon>
+                    <span>{{ section.title }}</span>
+                  </div>
+
+                  <!-- Paragraphs / bullet lists -->
+                  <div class="desc-section__content">
+                    @for (para of section.paragraphs; track $index) {
+                      @if (para.length > 1) {
+                        <!-- Multiple lines → render as styled bullet list -->
+                        <ul class="desc-list">
+                          @for (line of para; track $index) {
+                            <li>{{ line }}</li>
+                          }
+                        </ul>
+                      } @else {
+                        <p class="desc-para">{{ para[0] }}</p>
+                      }
+                    }
+                  </div>
+                </div>
+
+                @if (!last) { <div class="desc-divider"></div> }
+              }
+            </div>
+          } @else {
+            <!-- Fallback for un-enriched jobs -->
+            <p class="detail-desc">{{ job.description }}</p>
+          }
         </div>
 
-        <!-- Requirements -->
+        <!-- Requirements / Skills -->
         @if (job.requirements?.length) {
           <div class="hs-card detail-section">
-            <h2><mat-icon>checklist</mat-icon> Compétences requises</h2>
+            <h2><mat-icon>checklist</mat-icon> Compétences & Traits de personnalité</h2>
             <div class="skills-grid">
               @for (req of job.requirements!; track req) {
-                <span class="skill-chip">{{ req }}</span>
+                <span class="skill-chip"><mat-icon>check_circle</mat-icon>{{ req }}</span>
               }
             </div>
           </div>
