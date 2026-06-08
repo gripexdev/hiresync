@@ -19,6 +19,9 @@
    - [4.6 Consultation de l'historique des optimisations](#46-consultation-de-lhistorique-des-optimisations)
    - [4.7 CV Studio — Template Designer & Export PDF](#47-cv-studio--template-designer--export-pdf)
    - [4.8 Frontend Angular — 10 pages](#48-frontend-angular--10-pages)
+   - [4.9 Scraping des offres d'emploi (rekrute.com)](#49-scraping-des-offres-demploi-rekrutecom)
+   - [4.10 Enrichissement des descriptions](#410-enrichissement-des-descriptions)
+   - [4.11 Pagination côté serveur](#411-pagination-côté-serveur)
 5. [Lancer le projet](#5-lancer-le-projet)
 6. [Endpoints API](#6-endpoints-api)
 7. [Variables de configuration](#7-variables-de-configuration)
@@ -415,8 +418,8 @@ Si le CV uploadé est mal parsé (texte brut non structuré), l'utilisateur peut
 | Login | `/login` | `POST /api/auth/login` → JWT |
 | Register | `/register` | `POST /api/auth/register` → JWT |
 | Dashboard | `/dashboard` | Stats candidatures + notifications récentes (mock job/app data) |
-| Recherche offres | `/jobs` | Mock data Maroc (OCP, Maroc Telecom, CIH Bank, Inwi…) |
-| Détail offre | `/jobs/:id` | Score de compatibilité, bouton "Optimiser CV" |
+| **Recherche offres** | `/jobs` | **RÉEL** — offres scrapées depuis rekrute.com, pagination, filtres, barre admin |
+| **Détail offre** | `/jobs/:id` | **RÉEL** — description enrichie structurée, compétences, bouton "Optimiser CV" |
 | **Mon CV** | `/cv` | **RÉEL** — upload PDF, ATS réel, sections extraites, historique |
 | **Optimizer** | `/cv/optimize/:id` | **RÉEL** — loading IA animé, résultat Gemma 4, avant/après |
 | **CV Studio** | `/cv/studio/:id` | **RÉEL** — template designer, photo, live preview, export PDF vectoriel |
@@ -428,6 +431,321 @@ Si le CV uploadé est mal parsé (texte brut non structuré), l'utilisateur peut
 
 **Intercepteur JWT global :**  
 Tous les appels HTTP Angular ont automatiquement le header `Authorization: Bearer <token>` grâce à `authInterceptor`. Si le serveur répond 401/403, l'intercepteur déconnecte automatiquement l'utilisateur et le redirige vers `/login`.
+
+---
+
+---
+
+### 4.9 Scraping des offres d'emploi (rekrute.com)
+
+#### Vue d'ensemble du pipeline
+
+HireSync scrape automatiquement les offres d'emploi publiées sur **rekrute.com** (le principal job board marocain) et les stocke en base de données PostgreSQL. Le scraping se fait en **deux passes distinctes** : une passe rapide de collecte, puis une passe d'enrichissement.
+
+```
+rekrute.com                Spring Boot                 PostgreSQL
+    │                           │                           │
+    │  [Passe 1 — Collecte]     │                           │
+    │                           │                           │
+    │◄── GET /offres-emploi-maroc.html                      │
+    │    GET /offres.html?p=2   │                           │
+    │    GET /offres.html?p=3   │                           │
+    │                           │                           │
+    │  parse 10 offres/page     │                           │
+    │  × 3 pages = 30 offres    │                           │
+    │                           ├─ INSERT INTO jobs ────────►│
+    │                           │   (si sourceUrl inconnu)  │
+    │                           │                           │
+    │  [Passe 2 — Enrichissement]                           │
+    │                           │                           │
+    │◄── GET /offre-emploi-*.html  (page détail)            │
+    │  (1 requête / offre)      │                           │
+    │                           ├─ UPDATE jobs SET ─────────►│
+    │                           │   description, requirements│
+    │                           │   enriched = true         │
+```
+
+#### Ce qui est extrait lors de la collecte (page listing)
+
+Chaque carte d'offre sur la page de liste correspond à un élément `<li class="post-id">` dans le HTML de rekrute.com. Le scraper extrait :
+
+| Champ | Sélecteur Jsoup | Exemple |
+|-------|----------------|---------|
+| `title` | `a.titreJob` (texte avant ` | `) | "Gestionnaire Clientèle (H/F)" |
+| `location` | `a.titreJob` (texte après ` | `, sans "(Maroc)") | "Casablanca" |
+| `company` | `img.photo[alt]` — ignoré si src contient "confidentiel" | "Attijariwafa bank" |
+| `logoUrl` | `BASE_URL/rekrute/file/jobOfferLogo/jobOfferId/{li.id}` | URL de l'image logo |
+| `contractType` | `a[href*='contractType']` | "CDI" |
+| `sector` | `a[href*='sectorId']` | "Banque / Finance" |
+| `experienceLevel` | `a[href*='workExperienceId']` | "Débutant (-1 an)" |
+| `description` | Premier `div.info > span` (résumé IA généré par rekrute) | Court texte descriptif |
+| `postedAt` | `em.date span` — format `dd/MM/yyyy` | "2026-06-08" |
+| `sourceUrl` | `href` du lien `a.titreJob` — **clé de déduplication** | `/offre-emploi-*.html` |
+
+#### Déduplication
+
+Le champ `sourceUrl` porte un **index unique** en base (`UNIQUE CONSTRAINT`). Avant chaque insertion, le scraper vérifie :
+
+```java
+// JobScraperService.java
+if (jobRepository.existsBySourceUrl(sourceUrl)) continue; // déjà en base → skip
+```
+
+Appeler `/api/admin/scrape/trigger` plusieurs fois de suite est donc **idempotent** — les offres déjà présentes ne sont pas dupliquées.
+
+#### Rotation des pages
+
+```
+Page 1 → https://www.rekrute.com/offres-emploi-maroc.html       (offres Maroc)
+Page 2 → https://www.rekrute.com/offres.html?s=1&p=2&o=1        (tri par date desc)
+Page 3 → https://www.rekrute.com/offres.html?s=1&p=3&o=1
+```
+
+Le nombre de pages scrapées est configurable via la constante `MAX_PAGES = 3` dans `JobScraperService.java`. Chaque page contient ~10 offres → **30 offres par déclenchement**.
+
+#### Entreprise confidentielle
+
+Rekrute.com masque certains recruteurs. Le scraper le détecte via l'URL de l'image logo :
+
+```java
+// Si src contient "confidentiel" → entreprise masquée
+if (src.contains("confidentiel")) {
+    company = null;   // affiché "Confidentiel" dans l'UI
+    logoUrl  = null;
+}
+```
+
+#### Stockage en base
+
+Table **`jobs`** (PostgreSQL, gérée par Hibernate avec `ddl-auto: update`) :
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| `id` | UUID | Clé primaire générée |
+| `title` | VARCHAR | Intitulé du poste |
+| `company` | VARCHAR | Nom de l'entreprise (null si confidentiel) |
+| `location` | VARCHAR | Ville (ex : "Casablanca") |
+| `contract_type` | VARCHAR | CDI, CDD, Stage… |
+| `sector` | VARCHAR | Secteur d'activité |
+| `experience_level` | VARCHAR | Débutant, Junior, Senior… |
+| `description` | TEXT | Texte court (collecte) → texte complet (après enrichissement) |
+| `logo_url` | VARCHAR(512) | URL du logo entreprise |
+| `source_url` | VARCHAR(1024) | URL de l'offre — **UNIQUE** (clé de dédup) |
+| `source` | VARCHAR | `"rekrute.com"` |
+| `posted_at` | TIMESTAMP | Date de publication originale |
+| `scraped_at` | TIMESTAMP | Date d'insertion en base |
+| `enriched` | BOOLEAN | `false` → description courte, `true` → description complète |
+
+Table **`job_requirements`** (table de jointure `@ElementCollection`) :
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| `job_id` | UUID FK | Référence vers `jobs.id` |
+| `requirement` | VARCHAR | Un trait de personnalité ou compétence |
+
+---
+
+### 4.10 Enrichissement des descriptions
+
+#### Pourquoi une deuxième passe ?
+
+La page de liste rekrute.com ne contient qu'un **court résumé** de l'offre (généré par rekrute). La description complète (missions détaillées, profil recherché, formation requise) se trouve **uniquement sur la page de détail** de chaque offre.
+
+Effectuer 30 requêtes supplémentaires lors du scraping initial ralentirait excessivement l'opération. L'enrichissement est donc une **étape séparée**, déclenchée manuellement via le bouton "Enrichir descriptions" dans l'interface.
+
+#### Ce que l'enrichissement extrait
+
+Le scraper visite la page de détail de chaque offre (`sourceUrl`) et extrait deux sections depuis le HTML :
+
+```html
+<!-- Structure HTML de rekrute.com — page détail -->
+<div class="col-md-12 blc">
+  <h2>Poste :</h2>
+  <p>Dans le cadre du développement de notre réseau d'Agences...</p>
+  <p>Vos missions sont les suivantes:</p>
+  <p>Assurer l'accueil de la clientèle...<br>
+     Assurer les travaux d'ouverture...<br>
+     Prendre en charge la gestion...</p>
+</div>
+
+<div class="col-md-12 blc">
+  <h2>Profil recherché :</h2>
+  <p>De formation Bac+2/Bac+3...</p>
+  <p>Pourquoi nous rejoindre ?<br>
+     Intégrer une banque leader...<br>
+     Bénéficiez d'un environnement...</p>
+</div>
+
+<span class="tagSkills">Volonté de persuasion</span>
+<span class="tagSkills">Flexibilité</span>
+<span class="tagSkills">Implication au travail</span>
+```
+
+#### Préservation de la structure (nodeToText)
+
+Contrairement à `element.text()` de Jsoup qui écrase tout en une seule ligne, l'enrichisseur utilise un parcours récursif du DOM pour **conserver les sauts de ligne** :
+
+```java
+// JobEnrichmentService.java
+private String nodeToText(Node node) {
+    StringBuilder sb = new StringBuilder();
+    for (Node child : node.childNodes()) {
+        if (child instanceof TextNode) {
+            sb.append(((TextNode) child).text());       // texte brut
+        } else if (child instanceof Element el) {
+            if (el.tagName().equals("br")) {
+                sb.append("\n");                         // <br> → saut de ligne
+            } else {
+                sb.append(nodeToText(el));               // récursion
+            }
+        }
+    }
+    return sb.toString();
+}
+```
+
+Résultat stocké en base pour la section "Poste" :
+
+```
+Dans le cadre du développement de notre réseau d'Agences...
+
+Vos missions sont les suivantes:
+
+Assurer l'accueil de la clientèle...
+Assurer les travaux d'ouverture...
+Prendre en charge la gestion de sa caisse...
+Contribuer au dénouement des réclamations...
+```
+
+La description finale en base est :
+
+```
+{texte Poste}\n\nProfil recherché :\n{texte Profil}
+```
+
+#### Comportement du flag `enriched`
+
+| Valeur | Signification |
+|--------|--------------|
+| `false` (défaut) | Offre collectée, description courte (résumé rekrute) |
+| `true` | Page détail visitée, description complète + requirements stockés |
+
+Le endpoint `/api/admin/enrich/trigger` récupère les **20 premières offres** avec `enriched = false` (les plus récentes en premier) et les traite séquentiellement avec **400 ms de délai entre chaque requête** pour ne pas saturer rekrute.com.
+
+Relancer le trigger plusieurs fois enrichit les lots suivants de 20 jusqu'à ce que `enrichedLeft = 0`.
+
+#### Rendu côté Angular
+
+Le composant `JobDetailComponent` analyse la description stockée et la décompose en sections visuelles :
+
+```
+┌──────────────────────────────────────────────────────┐
+│  📋 Description du poste                             │
+│                                                      │
+│  │ 🚀 MISSION & RESPONSABILITÉS                      │  ← barre bleue
+│  │                                                   │
+│  │  Dans le cadre du développement de notre         │
+│  │  réseau d'Agences, nous recrutons...             │
+│  │                                                   │
+│  │  Vos missions sont les suivantes :               │
+│  │  ● Assurer l'accueil de la clientèle...          │
+│  │  ● Prendre en charge la gestion de caisse...     │
+│  │  ● Contribuer au dénouement des réclamations...  │
+│  │                                                   │
+│  ─────────────────────────────────────────────────  │
+│                                                      │
+│  │ 👤 PROFIL RECHERCHÉ                               │  ← barre verte
+│  │                                                   │
+│  │  De formation Bac+2/Bac+3 type BTS, DUT...       │
+│  │  ● Intégrer une banque leader sur le marché...   │
+│  │  ● Bénéficiez d'un environnement stimulant...    │
+└──────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────┐
+│  ✅ Compétences & Traits de personnalité              │
+│  ✅ Volonté de persuasion  ✅ Flexibilité             │
+│  ✅ Conventionnel          ✅ Implication au travail  │
+└──────────────────────────────────────────────────────┘
+```
+
+La logique de parsing (TypeScript) :
+```typescript
+// Coupe sur le marqueur injecté lors de l'enrichissement
+const idx = desc.indexOf('Profil recherché :');
+const posteText  = desc.slice(0, idx);         // → section Mission
+const profilText = desc.slice(idx + marker.length); // → section Profil
+
+// Chaque bloc séparé par \n\n → un paragraphe
+// Un paragraphe avec des \n internes → liste de bullet points ●
+```
+
+---
+
+### 4.11 Pagination côté serveur
+
+#### Pourquoi côté serveur ?
+
+Le nombre total d'offres en base grossit à chaque scraping. Charger toutes les offres en une seule requête serait inefficace. La pagination est entièrement gérée par **Spring Data** (`Page<T>`) et mappée côté Angular.
+
+#### Backend — Spring Data Page
+
+```java
+// JobController.java
+@GetMapping("/jobs")
+public Page<Job> search(
+    @RequestParam(defaultValue = "") String q,
+    @RequestParam(defaultValue = "0") int page,
+    @RequestParam(defaultValue = "20") int size
+) {
+    return jobRepository.search(q, PageRequest.of(page, size,
+        Sort.by("scrapedAt").descending()));
+}
+```
+
+```java
+// JobRepository.java
+@Query("""
+    SELECT j FROM Job j
+    WHERE :q IS NULL OR :q = ''
+       OR LOWER(j.title)    LIKE LOWER(CONCAT('%', :q, '%'))
+       OR LOWER(j.company)  LIKE LOWER(CONCAT('%', :q, '%'))
+       OR LOWER(j.location) LIKE LOWER(CONCAT('%', :q, '%'))
+    """)
+Page<Job> search(@Param("q") String q, Pageable pageable);
+```
+
+La réponse Spring contient : `content[]`, `totalElements`, `totalPages`, `number`, `size`.
+
+#### Frontend — Angular Signals
+
+```typescript
+// job-search.component.ts
+currentPage = signal(0);       // page active (0-indexed)
+totalPages  = signal(0);       // nombre total de pages
+
+// Pages visibles dans la barre (avec ellipsis "...")
+readonly visiblePages = computed((): (number | null)[] => {
+  // Si ≤ 7 pages → toutes affichées
+  // Sinon → [0, null, cur-1, cur, cur+1, null, last]
+  // null = "…" non-cliquable
+});
+
+// Reset vers la page 1 à chaque changement de filtre
+this.filters.valueChanges.pipe(debounceTime(400)).subscribe(() => {
+  this.currentPage.set(0);
+  this._search();
+});
+```
+
+#### Barre de pagination rendue
+
+```
+Offres 1–10 sur 47        [<]  [1]  [2]  …  [5]  [>]
+```
+
+- **`[<]` / `[>]`** désactivés en début / fin de liste
+- Page active surlignée en bleu
+- Les numéros intermédiaires se recalculent dynamiquement selon la page courante
 
 ---
 
@@ -517,6 +835,18 @@ curl -H "Authorization: Bearer <token>" http://localhost:8080/api/cv/versions
 | GET | `/api/cv/optimize/{id}` | Consulter le résultat d'une optimisation (polling fallback WebSocket) |
 | GET | `/api/cv/optimization-history` | Historique des optimisations |
 
+### Jobs (public — sans authentification)
+| Méthode | URL | Paramètres | Description |
+|---------|-----|-----------|-------------|
+| GET | `/api/jobs` | `?q=&page=0&size=10` | Recherche paginée — `q` filtre titre/entreprise/ville |
+| GET | `/api/jobs/{id}` | — | Détail d'une offre (description complète si enrichie) |
+
+### Admin (authentification requise)
+| Méthode | URL | Description |
+|---------|-----|-------------|
+| POST | `/api/admin/scrape/trigger` | Lance le scraping rekrute.com → 3 pages × ~10 offres. Retourne `{newJobsSaved, totalJobsInDb}` |
+| POST | `/api/admin/enrich/trigger` | Enrichit les 20 prochaines offres non-enrichies (visite page détail). Retourne `{enrichedThisRun, totalEnriched, enrichedLeft}` |
+
 ### WebSocket
 | Endpoint | Protocole | Description |
 |----------|-----------|-------------|
@@ -580,11 +910,18 @@ backend/src/main/java/ma/hiresync/
 │   └── controller/
 │       └── CvController.java                REST endpoints CV (upload, list, optimize, history)
 │
+├── job/
+│   ├── Job.java                             Entité JPA offre d'emploi (+ @ElementCollection requirements)
+│   ├── JobRepository.java                   search() JPQL paginé, existsBySourceUrl, findTop20ByEnrichedFalse
+│   ├── JobController.java                   GET /api/jobs, GET /api/jobs/{id}, POST /admin/scrape+enrich
+│   ├── JobScraperService.java               Jsoup scraper → rekrute.com listing pages (3 × ~10 offres)
+│   └── JobEnrichmentService.java            Jsoup scraper → pages détail (description + tagSkills)
+│
 ├── notification/
 │   └── NotificationService.java             convertAndSendToUser → Angular WebSocket
 │
 └── config/
-    ├── SecurityConfig.java                  Spring Security (JWT filter, CORS, stateless)
+    ├── SecurityConfig.java                  Spring Security (JWT, CORS, GET /api/jobs public)
     ├── WebSocketConfig.java                 STOMP sur SockJS (/ws/notifications)
     └── RabbitMQConfig.java                  Exchange + Queue + DLQ + JSON converter
 ```
