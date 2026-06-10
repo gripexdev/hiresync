@@ -38,3 +38,16 @@ export interface JobSearchResult {
   page: number;
   size: number;
 }
+
+/** Response of POST /api/admin/scrape/trigger */
+export interface ScrapeResult {
+  newJobsSaved: number;
+  totalJobsInDb: number;
+}
+
+/** Response of POST /api/admin/enrich/trigger */
+export interface EnrichResult {
+  enrichedThisRun: number;
+  totalEnriched: number;
+  enrichedLeft: number;
+}

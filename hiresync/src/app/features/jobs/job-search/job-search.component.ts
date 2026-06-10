@@ -2,7 +2,6 @@ import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { ReactiveFormsModule, FormBuilder } from '@angular/forms';
-import { HttpClient } from '@angular/common/http';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -15,7 +14,6 @@ import { debounceTime, distinctUntilChanged } from 'rxjs';
 import { JobService } from '../../../core/services/job.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { Job, ContractType, ExperienceLevel } from '../../../core/models/job.model';
-import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-job-search',
@@ -29,7 +27,6 @@ import { environment } from '../../../../environments/environment';
 export class JobSearchComponent implements OnInit {
   private fb    = inject(FormBuilder);
   private svc   = inject(JobService);
-  private http  = inject(HttpClient);
   private snack = inject(MatSnackBar);
   auth          = inject(AuthService);
 
@@ -111,7 +108,7 @@ export class JobSearchComponent implements OnInit {
 
   triggerScrape(): void {
     this.scraping.set(true);
-    this.http.post<any>(`${environment.apiUrl}/admin/scrape/trigger`, {}).subscribe({
+    this.svc.triggerScrape().subscribe({
       next: r => {
         this.scraping.set(false);
         this.snack.open(`✅ ${r.newJobsSaved} nouvelles offres scraped (total: ${r.totalJobsInDb})`, 'OK', { duration: 4000 });
@@ -127,7 +124,7 @@ export class JobSearchComponent implements OnInit {
 
   triggerEnrich(): void {
     this.enriching.set(true);
-    this.http.post<any>(`${environment.apiUrl}/admin/enrich/trigger`, {}).subscribe({
+    this.svc.triggerEnrich().subscribe({
       next: r => {
         this.enriching.set(false);
         const msg = r.enrichedLeft > 0

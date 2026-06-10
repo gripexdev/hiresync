@@ -1,4 +1,4 @@
-package ma.hiresync.job;
+package ma.hiresync.job.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -12,27 +12,24 @@ import java.util.UUID;
 @Table(name = "jobs", indexes = {
     @Index(name = "idx_jobs_source_url", columnList = "sourceUrl", unique = true)
 })
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Job {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    UUID id;
+    private UUID id;
 
     @Column(nullable = false)
-    String title;
+    private String title;
 
-    String company;
-    String location;
-    String contractType;
-    String sector;
-    String experienceLevel;
+    private String company;
+    private String location;
+    private String contractType;
+    private String sector;
+    private String experienceLevel;
 
     @Column(columnDefinition = "TEXT")
-    String description;
+    private String description;
 
     /** Skills / personality traits scraped from the job detail page */
     @ElementCollection(fetch = FetchType.EAGER)
@@ -40,23 +37,23 @@ public class Job {
                      joinColumns = @JoinColumn(name = "job_id"))
     @Column(name = "requirement")
     @Builder.Default
-    List<String> requirements = new ArrayList<>();
+    private List<String> requirements = new ArrayList<>();
 
     @Column(length = 512)
-    String logoUrl;
+    private String logoUrl;
 
     @Column(unique = true, nullable = false, length = 1024)
-    String sourceUrl;
+    private String sourceUrl;
 
-    String source;
+    private String source;
 
-    LocalDateTime postedAt;
+    private LocalDateTime postedAt;
 
     @Column(nullable = false)
-    LocalDateTime scrapedAt;
+    private LocalDateTime scrapedAt;
 
     /** True once the detail page has been fetched and description/requirements filled in */
     @Column(nullable = false, columnDefinition = "boolean default false")
     @Builder.Default
-    boolean enriched = false;
+    private boolean enriched = false;
 }

@@ -1,7 +1,9 @@
-package ma.hiresync.job;
+package ma.hiresync.job.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import ma.hiresync.job.entity.Job;
+import ma.hiresync.job.repository.JobRepository;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;

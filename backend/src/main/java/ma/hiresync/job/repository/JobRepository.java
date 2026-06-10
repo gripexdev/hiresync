@@ -1,5 +1,6 @@
-package ma.hiresync.job;
+package ma.hiresync.job.repository;
 
+import ma.hiresync.job.entity.Job;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
