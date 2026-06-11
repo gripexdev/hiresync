@@ -51,6 +51,8 @@ public class JobEnrichmentService {
                 log.warn("Enrichment failed for job {} ({}): {}",
                         job.getId(), job.getSourceUrl(), e.getMessage());
                 // Mark enriched anyway so we don't retry a permanently broken URL
+                // (for indeed.ma, the snippet description from the listing stays
+                // as a fallback when the detail page is rate-limited/blocked)
                 job.setEnriched(true);
                 jobRepository.save(job);
             }

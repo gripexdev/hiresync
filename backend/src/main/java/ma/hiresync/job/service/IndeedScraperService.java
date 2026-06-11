@@ -80,7 +80,11 @@ public class IndeedScraperService {
             String jobkey = r.path("jobkey").asText(null);
             if (jobkey == null || jobkey.isBlank()) continue;
 
-            String sourceUrl = BASE_URL + "/viewjob?jk=" + jobkey;
+            // Indeed's SPA renders job details inline on the search page itself
+            // (right-hand panel) — selected via the &vjk= query param. Direct
+            // /viewjob?jk= requests get 403'd, but this URL serves the same
+            // div#jobDescriptionText content and is reachable for enrichment.
+            String sourceUrl = SEARCH_URL + "&vjk=" + jobkey;
             if (jobRepository.existsBySourceUrl(sourceUrl)) continue;
 
             String title = r.path("title").asText("").trim();
