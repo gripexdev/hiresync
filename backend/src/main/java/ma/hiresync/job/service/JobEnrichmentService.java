@@ -16,10 +16,11 @@ import java.util.stream.Collectors;
 
 /**
  * Fetches each job's detail page (sourceUrl) and fills in:
- *   - description  → "Poste :" section + "Profil recherché :" section
- *                     paragraphs preserved with \n\n, <br> items with \n
- *   - requirements → span.tagSkills items (skills / personality traits)
+ *   - description  → "Poste :" section + "Profil recherché :" section,
+ *                     paragraphs preserved with \n\n, <br> / <li> items with \n
+ *   - requirements → skills / personality traits listed on the detail page
  *
+ * Extraction is source-specific (rekrute.com vs emploi.ma — see job.getSource()).
  * Called via POST /api/admin/enrich/trigger — processes up to 20 jobs per call.
  */
 @Service
@@ -70,29 +71,19 @@ public class JobEnrichmentService {
 
         Document doc = Jsoup.connect(job.getSourceUrl())
                 .userAgent(USER_AGENT)
-                .referrer("https://www.rekrute.com")
+                .referrer("https://www." + job.getSource())
                 .timeout(12_000)
                 .get();
 
-        // ── Description: merge "Poste :" and "Profil recherché :" sections ──
-        String poste  = extractSection(doc, "Poste");
-        String profil = extractSection(doc, "Profil");
-
-        String description = null;
-        if (poste != null && profil != null) {
-            description = poste + "\n\nProfil recherché :\n" + profil;
-        } else if (poste != null) {
-            description = poste;
-        } else if (profil != null) {
-            description = profil;
+        String description;
+        List<String> requirements;
+        if ("emploi.ma".equals(job.getSource())) {
+            description  = extractEmploiMaDescription(doc);
+            requirements = extractEmploiMaSkills(doc);
+        } else {
+            description  = extractRekruteDescription(doc);
+            requirements = extractRekruteSkills(doc);
         }
-
-        // ── Requirements: span.tagSkills (personality traits + skills) ───────
-        List<String> requirements = doc.select("span.tagSkills").stream()
-                .map(s -> s.ownText().trim())
-                .filter(s -> !s.isEmpty())
-                .distinct()
-                .collect(Collectors.toList());
 
         // ── Persist ───────────────────────────────────────────────────────────
         if (description != null) job.setDescription(description);
@@ -103,6 +94,78 @@ public class JobEnrichmentService {
         log.info("  → {} chars description, {} requirements",
                 description != null ? description.length() : 0,
                 requirements.size());
+    }
+
+    // ── rekrute.com extraction ───────────────────────────────────────────────
+
+    /** Merges the "Poste :" and "Profil recherché :" sections (each a {@code div.blc}). */
+    private String extractRekruteDescription(Document doc) {
+        String poste  = extractSection(doc, "Poste");
+        String profil = extractSection(doc, "Profil");
+
+        if (poste != null && profil != null) {
+            return poste + "\n\nProfil recherché :\n" + profil;
+        }
+        return poste != null ? poste : profil;
+    }
+
+    /** Personality traits + skills, rendered as {@code span.tagSkills}. */
+    private List<String> extractRekruteSkills(Document doc) {
+        return doc.select("span.tagSkills").stream()
+                .map(s -> s.ownText().trim())
+                .filter(s -> !s.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    // ── emploi.ma extraction ─────────────────────────────────────────────────
+
+    /** Merges {@code div.job-description} ("Poste proposé") and {@code div.job-qualifications} ("Profil recherché"). */
+    private String extractEmploiMaDescription(Document doc) {
+        String poste  = divToText(doc.selectFirst("div.job-description"));
+        String profil = divToText(doc.selectFirst("div.job-qualifications"));
+
+        if (poste != null && profil != null) {
+            return poste + "\n\nProfil recherché :\n" + profil;
+        }
+        return poste != null ? poste : profil;
+    }
+
+    /** Skills listed as {@code ul.skills li}. */
+    private List<String> extractEmploiMaSkills(Document doc) {
+        return doc.select("ul.skills li").stream()
+                .map(Element::text)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Converts a content {@code <div>} (made of {@code <p>} and {@code <ul><li>} children)
+     * to plain text — paragraphs joined with \n\n, list items prefixed with "- ".
+     */
+    private String divToText(Element div) {
+        if (div == null) return null;
+        StringBuilder sb = new StringBuilder();
+        for (Element child : div.children()) {
+            if (child.tagName().equals("ul")) {
+                for (Element li : child.select("li")) {
+                    String text = li.text().trim();
+                    if (!text.isEmpty()) sb.append("- ").append(text).append("\n");
+                }
+                sb.append("\n");
+            } else {
+                String text = nodeToText(child).trim()
+                        .replaceAll("[ \\t]+", " ")
+                        .replaceAll(" \\n", "\n")
+                        .replaceAll("\\n ", "\n")
+                        .replaceAll("\\n{3,}", "\n\n");
+                if (!text.isEmpty()) sb.append(text).append("\n\n");
+            }
+        }
+        String result = sb.toString().replaceAll("\\n{3,}", "\n\n").trim();
+        return result.isEmpty() ? null : result;
     }
 
     // ── HTML → structured text helpers ───────────────────────────────────────

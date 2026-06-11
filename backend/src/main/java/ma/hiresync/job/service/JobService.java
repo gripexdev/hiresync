@@ -21,9 +21,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JobService {
 
-    private final JobRepository        jobRepository;
-    private final JobScraperService    scraper;
-    private final JobEnrichmentService enricher;
+    private final JobRepository          jobRepository;
+    private final JobScraperService      rekruteScraper;
+    private final EmploiMaScraperService emploiMaScraper;
+    private final JobEnrichmentService   enricher;
 
     /** Paginated job search (empty {@code q} returns everything). */
     public Page<JobResponse> search(String q, Pageable pageable) {
@@ -34,9 +35,9 @@ public class JobService {
         return jobRepository.findById(id).map(JobResponse::from);
     }
 
-    /** Runs the scraper synchronously and reports how many new jobs were saved. */
+    /** Runs all scrapers synchronously and reports how many new jobs were saved. */
     public ScrapeTriggerResponse triggerScrape() {
-        int saved = scraper.scrape();
+        int saved = rekruteScraper.scrape() + emploiMaScraper.scrape();
         long total = jobRepository.count();
         return new ScrapeTriggerResponse(saved, total);
     }
