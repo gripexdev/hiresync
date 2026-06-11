@@ -80,6 +80,9 @@ public class JobEnrichmentService {
         if ("emploi.ma".equals(job.getSource())) {
             description  = extractEmploiMaDescription(doc);
             requirements = extractEmploiMaSkills(doc);
+        } else if ("indeed.ma".equals(job.getSource())) {
+            description  = extractIndeedDescription(doc);
+            requirements = List.of();
         } else {
             description  = extractRekruteDescription(doc);
             requirements = extractRekruteSkills(doc);
@@ -139,6 +142,13 @@ public class JobEnrichmentService {
                 .filter(s -> !s.isEmpty())
                 .distinct()
                 .collect(Collectors.toList());
+    }
+
+    // ── indeed.ma extraction ──────────────────────────────────────────────────
+
+    /** Job description lives in {@code div#jobDescriptionText} ({@code <p>} and {@code <ul><li>} children). */
+    private String extractIndeedDescription(Document doc) {
+        return divToText(doc.selectFirst("div#jobDescriptionText"));
     }
 
     /**
