@@ -19,8 +19,12 @@
    - [4.6 Consultation de l'historique des optimisations](#46-consultation-de-lhistorique-des-optimisations)
    - [4.7 CV Studio — Template Designer & Export PDF](#47-cv-studio--template-designer--export-pdf)
    - [4.8 Frontend Angular — 10 pages](#48-frontend-angular--10-pages)
-   - [4.9 Scraping des offres d'emploi (rekrute.com)](#49-scraping-des-offres-demploi-rekrutecom)
-   - [4.10 Enrichissement des descriptions](#410-enrichissement-des-descriptions)
+   - [4.9 Scraping des offres d'emploi (multi-sources)](#49-scraping-des-offres-demploi-multi-sources)
+     - [4.9.1 Vue d'ensemble & orchestration](#491-vue-densemble--orchestration)
+     - [4.9.2 Source A — rekrute.com (HTML classique)](#492-source-a--rekrutecom-html-classique)
+     - [4.9.3 Source B — emploi.ma (HTML classique)](#493-source-b--emploima-html-classique)
+     - [4.9.4 Source C — Indeed Maroc (JSON embarqué)](#494-source-c--indeed-maroc-json-embarqué)
+   - [4.10 Enrichissement des descriptions (source-aware)](#410-enrichissement-des-descriptions-source-aware)
    - [4.11 Pagination côté serveur](#411-pagination-côté-serveur)
 5. [Lancer le projet](#5-lancer-le-projet)
 6. [Endpoints API](#6-endpoints-api)
@@ -57,6 +61,8 @@ HireSync est une plateforme web qui aide les candidats marocains à :
 | IA / LLM | **OpenRouter API** → `google/gemma-4-31b-it:free` | Optimisation du CV par l'IA |
 | PDF parsing | **Apache PDFBox 3.0** | Extraction du texte depuis les CVs PDF |
 | HTTP Client | **Spring WebFlux WebClient** | Appels HTTP vers OpenRouter |
+| Scraping HTML | **Jsoup 1.17** | Connexion HTTP + parsing DOM des job boards (rekrute, emploi.ma, indeed) |
+| Parsing JSON | **Jackson `ObjectMapper`** | Décodage du JSON embarqué dans les pages Indeed |
 
 ### Frontend (`/hiresync`)
 | Couche | Technologie | Rôle |
@@ -90,6 +96,12 @@ HireSync/
 │   │   │   ├── entity/         ← Entités JPA (Cv, CvOptimization)
 │   │   │   ├── repository/     ← Spring Data JPA
 │   │   │   └── dto/            ← Objets de transfert (request/response)
+│   │   ├── job/                ← Offres d'emploi (scraping multi-sources + enrichissement)
+│   │   │   ├── controller/     ← JobController (recherche, détail, triggers admin)
+│   │   │   ├── service/        ← JobService + 3 scrapers + JobEnrichmentService
+│   │   │   ├── entity/         ← Job (+ @ElementCollection requirements)
+│   │   │   ├── repository/     ← JobRepository (recherche paginée, dédup)
+│   │   │   └── dto/            ← JobResponse, Scrape/EnrichTriggerResponse
 │   │   ├── notification/       ← WebSocket push (SimpMessagingTemplate)
 │   │   └── config/             ← SecurityConfig, WebSocketConfig, RabbitMQConfig
 │   ├── docker-compose.yml      ← PostgreSQL + RabbitMQ
@@ -418,7 +430,7 @@ Si le CV uploadé est mal parsé (texte brut non structuré), l'utilisateur peut
 | Login | `/login` | `POST /api/auth/login` → JWT |
 | Register | `/register` | `POST /api/auth/register` → JWT |
 | Dashboard | `/dashboard` | Stats candidatures + notifications récentes (mock job/app data) |
-| **Recherche offres** | `/jobs` | **RÉEL** — offres scrapées depuis rekrute.com, pagination, filtres, barre admin |
+| **Recherche offres** | `/jobs` | **RÉEL** — offres scrapées depuis rekrute.com + emploi.ma + Indeed, pagination, filtres, barre admin |
 | **Détail offre** | `/jobs/:id` | **RÉEL** — description enrichie structurée, compétences, bouton "Optimiser CV" |
 | **Mon CV** | `/cv` | **RÉEL** — upload PDF, ATS réel, sections extraites, historique |
 | **Optimizer** | `/cv/optimize/:id` | **RÉEL** — loading IA animé, résultat Gemma 4, avant/après |
@@ -436,36 +448,68 @@ Tous les appels HTTP Angular ont automatiquement le header `Authorization: Beare
 
 ---
 
-### 4.9 Scraping des offres d'emploi (rekrute.com)
+### 4.9 Scraping des offres d'emploi (multi-sources)
 
-#### Vue d'ensemble du pipeline
+#### 4.9.1 Vue d'ensemble & orchestration
 
-HireSync scrape automatiquement les offres d'emploi publiées sur **rekrute.com** (le principal job board marocain) et les stocke en base de données PostgreSQL. Le scraping se fait en **deux passes distinctes** : une passe rapide de collecte, puis une passe d'enrichissement.
+HireSync agrège automatiquement les offres d'emploi de **trois job boards marocains** et les stocke dans une **table `jobs` unifiée** en PostgreSQL. Chaque source a son propre service de scraping, mais tous partagent la **même entité `Job`**, la **même clé de déduplication** (`sourceUrl` unique) et le **même pipeline en deux passes** : une passe rapide de **collecte** (listing) puis une passe d'**enrichissement** (page détail).
 
-```
-rekrute.com                Spring Boot                 PostgreSQL
-    │                           │                           │
-    │  [Passe 1 — Collecte]     │                           │
-    │                           │                           │
-    │◄── GET /offres-emploi-maroc.html                      │
-    │    GET /offres.html?p=2   │                           │
-    │    GET /offres.html?p=3   │                           │
-    │                           │                           │
-    │  parse 10 offres/page     │                           │
-    │  × 3 pages = 30 offres    │                           │
-    │                           ├─ INSERT INTO jobs ────────►│
-    │                           │   (si sourceUrl inconnu)  │
-    │                           │                           │
-    │  [Passe 2 — Enrichissement]                           │
-    │                           │                           │
-    │◄── GET /offre-emploi-*.html  (page détail)            │
-    │  (1 requête / offre)      │                           │
-    │                           ├─ UPDATE jobs SET ─────────►│
-    │                           │   description, requirements│
-    │                           │   enriched = true         │
+| Source | Service | Champ `source` | Technique de collecte | Pourquoi cette technique |
+|--------|---------|----------------|-----------------------|--------------------------|
+| **rekrute.com** | `JobScraperService` | `"rekrute.com"` | Jsoup → parsing du DOM HTML (`<li class="post-id">`) | Les offres sont rendues côté serveur dans le HTML → parsing DOM direct |
+| **emploi.ma** | `EmploiMaScraperService` | `"emploi.ma"` | Jsoup → parsing du DOM HTML (`<div class="card-job">`) | Idem — listing server-side, structure en cartes |
+| **Indeed Maroc** | `IndeedScraperService` | `"indeed.ma"` | Jsoup (fetch) + Jackson → **JSON embarqué** dans un `<script>` | Indeed ne rend **pas** les offres en HTML ; elles sont injectées en JSON dans `window.mosaic` |
+
+**Orchestration — `JobService.triggerScrape()` :**
+
+Les trois scrapers sont appelés séquentiellement et leurs compteurs additionnés. Le contrôleur ne parle qu'à `JobService` :
+
+```java
+// JobService.java
+public ScrapeTriggerResponse triggerScrape() {
+    int saved = rekruteScraper.scrape()      // rekrute.com
+              + emploiMaScraper.scrape()      // emploi.ma
+              + indeedScraper.scrape();       // indeed.ma
+    long total = jobRepository.count();
+    return new ScrapeTriggerResponse(saved, total);
+}
 ```
 
-#### Ce qui est extrait lors de la collecte (page listing)
+Un seul appel à `POST /api/admin/scrape/trigger` collecte donc les offres des **trois sources** d'un coup. La déduplication par `sourceUrl` rend l'opération **idempotente** quelle que soit la source.
+
+**Choix de conception communs (les 3 scrapers) :**
+
+- **Jsoup** comme client HTTP + parseur — une seule dépendance pour `connect().get()` *et* le parsing DOM, plus léger qu'un navigateur headless.
+- **Pas de navigateur headless (Playwright)** pour le scraping — il n'est utilisé que pour le rendu PDF du CV Studio (§4.7). Les trois sources sont accessibles en HTTP simple, donc inutile de payer le coût d'un Chromium.
+- **User-Agent honnête** : `Mozilla/5.0 (compatible; HireSync-Bot/1.0; +https://hiresync.ma)` — identifie le bot plutôt que d'usurper un vrai navigateur.
+- **`timeout(15_000)`** + `try/catch IOException` par page → un échec réseau interrompt proprement la source sans planter les autres.
+- **Déduplication avant insertion** : `if (jobRepository.existsBySourceUrl(sourceUrl)) continue;`
+- **`MAX_PAGES = 3`** (rekrute & emploi.ma) — constante en tête de service, facile à augmenter.
+
+```
+3 sources              Spring Boot                 PostgreSQL
+    │                       │                           │
+    │  [Passe 1 — Collecte] │                           │
+    │◄── rekrute  (3 pages) │                           │
+    │◄── emploi.ma (3 pages)│                           │
+    │◄── indeed   (1 page)  │                           │
+    │                       ├─ INSERT INTO jobs ────────►│
+    │                       │   (si sourceUrl inconnu)  │
+    │                       │                           │
+    │  [Passe 2 — Enrichissement, source-aware]         │
+    │◄── GET page détail    │                           │
+    │  (1 requête / offre)  ├─ UPDATE jobs SET ─────────►│
+    │                       │   description, requirements│
+    │                       │   enriched = true         │
+```
+
+---
+
+#### 4.9.2 Source A — rekrute.com (HTML classique)
+
+`JobScraperService` — `SOURCE = "rekrute.com"`, `BASE_URL = "https://www.rekrute.com"`.
+
+##### Ce qui est extrait lors de la collecte (page listing)
 
 Chaque carte d'offre sur la page de liste correspond à un élément `<li class="post-id">` dans le HTML de rekrute.com. Le scraper extrait :
 
@@ -482,7 +526,7 @@ Chaque carte d'offre sur la page de liste correspond à un élément `<li class=
 | `postedAt` | `em.date span` — format `dd/MM/yyyy` | "2026-06-08" |
 | `sourceUrl` | `href` du lien `a.titreJob` — **clé de déduplication** | `/offre-emploi-*.html` |
 
-#### Déduplication
+##### Déduplication
 
 Le champ `sourceUrl` porte un **index unique** en base (`UNIQUE CONSTRAINT`). Avant chaque insertion, le scraper vérifie :
 
@@ -493,7 +537,7 @@ if (jobRepository.existsBySourceUrl(sourceUrl)) continue; // déjà en base → 
 
 Appeler `/api/admin/scrape/trigger` plusieurs fois de suite est donc **idempotent** — les offres déjà présentes ne sont pas dupliquées.
 
-#### Rotation des pages
+##### Rotation des pages
 
 ```
 Page 1 → https://www.rekrute.com/offres-emploi-maroc.html       (offres Maroc)
@@ -503,7 +547,7 @@ Page 3 → https://www.rekrute.com/offres.html?s=1&p=3&o=1
 
 Le nombre de pages scrapées est configurable via la constante `MAX_PAGES = 3` dans `JobScraperService.java`. Chaque page contient ~10 offres → **30 offres par déclenchement**.
 
-#### Entreprise confidentielle
+##### Entreprise confidentielle
 
 Rekrute.com masque certains recruteurs. Le scraper le détecte via l'URL de l'image logo :
 
@@ -515,9 +559,11 @@ if (src.contains("confidentiel")) {
 }
 ```
 
-#### Stockage en base
+---
 
-Table **`jobs`** (PostgreSQL, gérée par Hibernate avec `ddl-auto: update`) :
+#### Schéma de stockage (commun aux 3 sources)
+
+Table **`jobs`** (PostgreSQL, gérée par Hibernate avec `ddl-auto: update`) — une seule table pour les trois job boards, distingués par la colonne `source` :
 
 | Colonne | Type | Description |
 |---------|------|-------------|
@@ -531,7 +577,7 @@ Table **`jobs`** (PostgreSQL, gérée par Hibernate avec `ddl-auto: update`) :
 | `description` | TEXT | Texte court (collecte) → texte complet (après enrichissement) |
 | `logo_url` | VARCHAR(512) | URL du logo entreprise |
 | `source_url` | VARCHAR(1024) | URL de l'offre — **UNIQUE** (clé de dédup) |
-| `source` | VARCHAR | `"rekrute.com"` |
+| `source` | VARCHAR | `"rekrute.com"`, `"emploi.ma"` ou `"indeed.ma"` |
 | `posted_at` | TIMESTAMP | Date de publication originale |
 | `scraped_at` | TIMESTAMP | Date d'insertion en base |
 | `enriched` | BOOLEAN | `false` → description courte, `true` → description complète |
@@ -545,15 +591,158 @@ Table **`job_requirements`** (table de jointure `@ElementCollection`) :
 
 ---
 
-### 4.10 Enrichissement des descriptions
+#### 4.9.3 Source B — emploi.ma (HTML classique)
+
+`EmploiMaScraperService` — `SOURCE = "emploi.ma"`, `BASE_URL = "https://www.emploi.ma"`.
+
+emploi.ma fonctionne sur le **même principe que rekrute.com** (HTML rendu côté serveur, parsé avec Jsoup), mais la structure du DOM diffère : chaque offre est une **carte** `<div class="card card-job">` et l'URL de l'offre est portée par l'attribut `data-href` de la carte (et non un `<a href>`).
+
+##### Ce qui est extrait lors de la collecte
+
+| Champ | Sélecteur Jsoup | Remarque |
+|-------|----------------|----------|
+| `sourceUrl` | `card.attr("data-href")` | **clé de déduplication** — l'URL est sur la carte, pas sur un lien |
+| `title` | `h3 > a` (texte) | — |
+| `company` | `a.card-job-company` | `null` pour les annonces confidentielles (texte "N.C.") |
+| `logoUrl` | `picture img[src]` | ignoré si `logo-non-dispo` / `default-logo` (placeholders) |
+| `description` | `div.card-job-description p` | court résumé affiché sur la carte |
+| `postedAt` | `time[datetime]` — format ISO `yyyy-MM-dd` | parsé via `LocalDate.parse()` |
+| `contractType` | `metaValue("Contrat proposé")` | voir helper ci-dessous |
+| `experienceLevel` | `metaValue("Niveau d'expérience")` | |
+| `location` | `metaValue("Région de")` | |
+
+##### Le helper `metaValue` — métadonnées en liste
+
+Les métadonnées (contrat, expérience, région) sont rangées dans un `<ul><li>` où le **libellé** est en texte et la **valeur** dans un `<strong>`. Le helper retrouve le bon `<li>` par son préfixe de libellé :
+
+```java
+// EmploiMaScraperService.java
+private String metaValue(Element card, String label) {
+    for (Element li : card.select("ul > li")) {
+        Element strong = li.selectFirst("strong");
+        if (strong != null && li.text().trim().startsWith(label)) {
+            return strong.text().trim();   // ex: "Contrat proposé : CDI" → "CDI"
+        }
+    }
+    return null;
+}
+```
+
+##### Rotation des pages
+
+```
+Page 1 → https://www.emploi.ma/recherche-jobs-maroc
+Page 2 → https://www.emploi.ma/recherche-jobs-maroc?page=1   (page=1 → 2ᵉ page)
+Page 3 → https://www.emploi.ma/recherche-jobs-maroc?page=2
+```
+
+`MAX_PAGES = 3`, même logique de boucle que rekrute (la page 1 utilise l'URL par défaut, les suivantes le paramètre `?page=N-1`).
+
+---
+
+#### 4.9.4 Source C — Indeed Maroc (JSON embarqué)
+
+`IndeedScraperService` — `SOURCE = "indeed.ma"`, `BASE_URL = "https://ma.indeed.com"`.
+
+##### Pourquoi Indeed est un cas à part
+
+Contrairement à rekrute et emploi.ma, **Indeed ne rend pas ses offres en HTML**. La page de résultats ne contient qu'une coquille vide ; les offres sont injectées par JavaScript depuis un **gros objet JSON embarqué** dans un `<script>` :
+
+```js
+window.mosaic.providerData["mosaic-provider-jobcards"]={"metaData":{
+  "mosaicProviderJobCardsModel":{"results":[ /* … les offres … */ ]}}, … };
+```
+
+Un parsing DOM classique (`doc.select(...)`) ne trouverait donc **aucune offre**. La stratégie est :
+
+1. **Jsoup** récupère le HTML et localise le `<script>` contenant le marqueur `window.mosaic.providerData["mosaic-provider-jobcards"]=`.
+2. Un **extracteur d'objet équilibré** (comptage des `{` / `}`) isole le JSON qui suit le `=`, en s'arrêtant à l'accolade fermante correspondante (le JS continue après avec d'autres assignations).
+3. **Jackson `ObjectMapper.readTree(...)`** parse ce JSON, puis on navigue jusqu'à `metaData → mosaicProviderJobCardsModel → results`.
+
+```java
+// IndeedScraperService.java — extraction de l'objet JSON équilibré
+private String extractJsonObject(String src, int start) {   // start = index du '{'
+    int depth = 0;
+    for (int i = start; i < src.length(); i++) {
+        char c = src.charAt(i);
+        if (c == '{') depth++;
+        else if (c == '}' && --depth == 0) return src.substring(start, i + 1);
+    }
+    return null;
+}
+```
+
+##### En-tête HTTP supplémentaire
+
+Indeed sert du contenu localisé. On ajoute donc un header `Accept-Language: fr-FR,fr;q=0.9` (en plus du User-Agent commun) pour obtenir les offres marocaines en français.
+
+##### Mapping JSON → entité `Job`
+
+Chaque objet du tableau `results` a 90+ champs ; on n'en garde que ceux utiles :
+
+| Champ `Job` | Clé JSON Indeed | Transformation |
+|-------------|-----------------|----------------|
+| `sourceUrl` | `jobkey` (⚠️ **minuscule**) | `BASE_URL + "/jobs?q=...&vjk=" + jobkey` (voir ci-dessous) |
+| `title` | `title` | — |
+| `company` | `company` | `null` si vide |
+| `location` | `formattedLocation` | ex : "Casablanca", "Rabat", "Remote" |
+| `contractType` | `jobTypes[]` | tableau (`["Temps plein","CDI"]`) **joint** en `"Temps plein, CDI"` |
+| `description` | `snippet` (HTML `<ul><li>`) | converti en texte à puces via `Jsoup.parseBodyFragment` |
+| `postedAt` | `pubDate` (epoch millis) | `Instant.ofEpochMilli(...)` → `LocalDateTime` |
+
+> ⚠️ **Piège** : la clé est `jobkey` tout en minuscule (et non `jobKey`). Une mauvaise casse renvoie silencieusement `null`.
+
+##### Pourquoi `&vjk=` et non `/viewjob`
+
+Le réflexe serait de pointer `sourceUrl` vers `https://ma.indeed.com/viewjob?jk=<jobkey>`. Mais cette URL renvoie **HTTP 403** (anti-bot). En réalité, l'interface Indeed est une **SPA** : cliquer une offre charge son détail **dans le panneau de droite de la même page de recherche**, via le paramètre `&vjk=<jobkey>`. On stocke donc :
+
+```
+sourceUrl = https://ma.indeed.com/jobs?q=offre+d%27emploi&l=&vjk=<jobkey>
+```
+
+Cette URL sert à la fois de **clé de dédup** et de **cible d'enrichissement** : elle contient le bloc `div#jobDescriptionText` avec la description complète (voir §4.10).
+
+##### Pagination limitée à 1 page
+
+Demander la page 2 (`&start=10`) **redirige vers le mur de connexion** d'Indeed (`secure.indeed.com/auth?...page-two-signin`). Seule la **première page** (~15 offres) est donc accessible sans authentification — d'où l'absence de boucle `MAX_PAGES` pour cette source.
+
+---
+
+### 4.10 Enrichissement des descriptions (source-aware)
 
 #### Pourquoi une deuxième passe ?
 
-La page de liste rekrute.com ne contient qu'un **court résumé** de l'offre (généré par rekrute). La description complète (missions détaillées, profil recherché, formation requise) se trouve **uniquement sur la page de détail** de chaque offre.
+Sur les trois sources, la page de liste ne contient qu'un **court résumé** de l'offre. La description complète (missions détaillées, profil recherché, formation requise) se trouve **uniquement sur la page de détail** de chaque offre.
 
-Effectuer 30 requêtes supplémentaires lors du scraping initial ralentirait excessivement l'opération. L'enrichissement est donc une **étape séparée**, déclenchée manuellement via le bouton "Enrichir descriptions" dans l'interface.
+Effectuer une requête détail par offre lors du scraping initial ralentirait excessivement l'opération. L'enrichissement est donc une **étape séparée**, déclenchée manuellement via le bouton "Enrichir descriptions" dans l'interface (`POST /api/admin/enrich/trigger`).
 
-#### Ce que l'enrichissement extrait
+#### Aiguillage par source (`enrichOne`)
+
+Un seul service, `JobEnrichmentService`, enrichit les trois sources. Comme chaque job board a une structure HTML de détail différente, l'extraction est **aiguillée selon `job.getSource()`** :
+
+```java
+// JobEnrichmentService.enrichOne()
+if ("emploi.ma".equals(job.getSource())) {
+    description  = extractEmploiMaDescription(doc);   // div.job-description + div.job-qualifications
+    requirements = extractEmploiMaSkills(doc);         // ul.skills li
+} else if ("indeed.ma".equals(job.getSource())) {
+    description  = extractIndeedDescription(doc);      // div#jobDescriptionText
+    requirements = List.of();                          // pas de liste de skills propre sur Indeed
+} else {
+    description  = extractRekruteDescription(doc);     // div.blc "Poste" + "Profil"
+    requirements = extractRekruteSkills(doc);          // span.tagSkills
+}
+```
+
+| Source | Sélecteur description | Sélecteur requirements |
+|--------|-----------------------|------------------------|
+| rekrute.com | `div.blc` dont le `<h2>` contient "Poste" / "Profil" | `span.tagSkills` |
+| emploi.ma | `div.job-description` + `div.job-qualifications` | `ul.skills li` |
+| indeed.ma | `div#jobDescriptionText` | *(aucun — Indeed n'expose pas de liste de compétences propre)* |
+
+Tous réutilisent le même helper de conversion DOM→texte (`divToText` / `nodeToText`, voir plus bas) pour préserver la structure en paragraphes et puces.
+
+#### Ce que l'enrichissement extrait — cas rekrute.com
 
 Le scraper visite la page de détail de chaque offre (`sourceUrl`) et extrait deux sections depuis le HTML :
 
@@ -627,12 +816,18 @@ La description finale en base est :
 
 | Valeur | Signification |
 |--------|--------------|
-| `false` (défaut) | Offre collectée, description courte (résumé rekrute) |
-| `true` | Page détail visitée, description complète + requirements stockés |
+| `false` (défaut) | Offre collectée, description courte (résumé du listing) |
+| `true` | Page détail traitée (ou échec définitif) — voir tolérance aux pannes |
 
-Le endpoint `/api/admin/enrich/trigger` récupère les **20 premières offres** avec `enriched = false` (les plus récentes en premier) et les traite séquentiellement avec **400 ms de délai entre chaque requête** pour ne pas saturer rekrute.com.
+Le endpoint `/api/admin/enrich/trigger` récupère les **20 premières offres** avec `enriched = false` (les plus récentes en premier) et les traite séquentiellement avec **400 ms de délai entre chaque requête** pour ne pas saturer les serveurs sources.
 
 Relancer le trigger plusieurs fois enrichit les lots suivants de 20 jusqu'à ce que `enrichedLeft = 0`.
+
+#### Tolérance aux pannes
+
+Chaque enrichissement est isolé dans un `try/catch` : si la page détail échoue (404, timeout, ou **HTTP 403 anti-bot côté Indeed**), l'offre est tout de même marquée `enriched = true` pour ne pas boucler indéfiniment sur une URL cassée.
+
+Pour **indeed.ma**, le 403 est intermittent (rate-limiting selon l'IP sortante). En cas d'échec, l'offre **conserve la description courte issue du `snippet`** récupéré à la collecte — le détail complet reste un *bonus* : si l'IP du serveur n'est pas bloquée (ex : en production), `div#jobDescriptionText` fournit la description complète ; sinon le snippet sert de repli, et l'UI reste fonctionnelle.
 
 #### Rendu côté Angular
 
@@ -844,8 +1039,8 @@ curl -H "Authorization: Bearer <token>" http://localhost:8080/api/cv/versions
 ### Admin (authentification requise)
 | Méthode | URL | Description |
 |---------|-----|-------------|
-| POST | `/api/admin/scrape/trigger` | Lance le scraping rekrute.com → 3 pages × ~10 offres. Retourne `{newJobsSaved, totalJobsInDb}` |
-| POST | `/api/admin/enrich/trigger` | Enrichit les 20 prochaines offres non-enrichies (visite page détail). Retourne `{enrichedThisRun, totalEnriched, enrichedLeft}` |
+| POST | `/api/admin/scrape/trigger` | Lance le scraping des **3 sources** (rekrute.com 3 pages + emploi.ma 3 pages + Indeed 1 page). Retourne `{newJobsSaved, totalJobsInDb}` |
+| POST | `/api/admin/enrich/trigger` | Enrichit les 20 prochaines offres non-enrichies (visite page détail, extraction aiguillée par source). Retourne `{enrichedThisRun, totalEnriched, enrichedLeft}` |
 
 ### WebSocket
 | Endpoint | Protocole | Description |
@@ -911,11 +1106,16 @@ backend/src/main/java/ma/hiresync/
 │       └── CvController.java                REST endpoints CV (upload, list, optimize, history)
 │
 ├── job/
-│   ├── Job.java                             Entité JPA offre d'emploi (+ @ElementCollection requirements)
-│   ├── JobRepository.java                   search() JPQL paginé, existsBySourceUrl, findTop20ByEnrichedFalse
-│   ├── JobController.java                   GET /api/jobs, GET /api/jobs/{id}, POST /admin/scrape+enrich
-│   ├── JobScraperService.java               Jsoup scraper → rekrute.com listing pages (3 × ~10 offres)
-│   └── JobEnrichmentService.java            Jsoup scraper → pages détail (description + tagSkills)
+│   ├── entity/Job.java                      Entité JPA offre d'emploi (+ @ElementCollection requirements)
+│   ├── repository/JobRepository.java        search() JPQL paginé, existsBySourceUrl, findTop20ByEnrichedFalse
+│   ├── controller/JobController.java        GET /api/jobs, GET /api/jobs/{id}, POST /admin/scrape+enrich
+│   ├── dto/                                 JobResponse, ScrapeTriggerResponse, EnrichTriggerResponse
+│   └── service/
+│       ├── JobService.java                  Orchestrateur — triggerScrape() additionne les 3 scrapers, mapping DTO
+│       ├── JobScraperService.java           Jsoup → rekrute.com listing (3 pages × ~10 offres)
+│       ├── EmploiMaScraperService.java      Jsoup → emploi.ma listing (cartes card-job, 3 pages)
+│       ├── IndeedScraperService.java        Jsoup + Jackson → Indeed JSON embarqué (window.mosaic, 1 page)
+│       └── JobEnrichmentService.java        Pages détail, extraction aiguillée par source (description + requirements)
 │
 ├── notification/
 │   └── NotificationService.java             convertAndSendToUser → Angular WebSocket
