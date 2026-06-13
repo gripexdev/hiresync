@@ -1,8 +1,8 @@
 package ma.hiresync.config;
 
 import lombok.RequiredArgsConstructor;
-import ma.hiresync.auth.JwtAuthFilter;
-import ma.hiresync.auth.UserDetailsServiceImpl;
+import ma.hiresync.auth.security.JwtAuthFilter;
+import ma.hiresync.auth.service.UserDetailsServiceImpl;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;

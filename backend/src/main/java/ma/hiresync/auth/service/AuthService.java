@@ -1,10 +1,11 @@
-package ma.hiresync.auth;
+package ma.hiresync.auth.service;
 
 import lombok.RequiredArgsConstructor;
 import ma.hiresync.auth.dto.AuthResponse;
 import ma.hiresync.auth.dto.LoginRequest;
 import ma.hiresync.auth.dto.RegisterRequest;
 import ma.hiresync.auth.entity.User;
+import ma.hiresync.auth.repository.UserRepository;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;

@@ -1,4 +1,4 @@
-package ma.hiresync.auth;
+package ma.hiresync.auth.service;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;

@@ -2,7 +2,7 @@ package ma.hiresync.cv.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import ma.hiresync.auth.UserRepository;
+import ma.hiresync.auth.repository.UserRepository;
 import ma.hiresync.cv.dto.*;
 import ma.hiresync.cv.entity.Cv;
 import ma.hiresync.cv.entity.CvOptimization;

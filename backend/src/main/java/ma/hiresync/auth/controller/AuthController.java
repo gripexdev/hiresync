@@ -1,10 +1,11 @@
-package ma.hiresync.auth;
+package ma.hiresync.auth.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import ma.hiresync.auth.dto.AuthResponse;
 import ma.hiresync.auth.dto.LoginRequest;
 import ma.hiresync.auth.dto.RegisterRequest;
+import ma.hiresync.auth.service.AuthService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

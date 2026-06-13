@@ -2,7 +2,7 @@ package ma.hiresync.cv.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import ma.hiresync.auth.JwtService;
+import ma.hiresync.auth.service.JwtService;
 import ma.hiresync.cv.dto.*;
 import ma.hiresync.cv.service.CvService;
 import org.springframework.http.HttpHeaders;

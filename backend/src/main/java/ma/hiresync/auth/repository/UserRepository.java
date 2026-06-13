@@ -1,4 +1,4 @@
-package ma.hiresync.auth;
+package ma.hiresync.auth.repository;
 
 import ma.hiresync.auth.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;

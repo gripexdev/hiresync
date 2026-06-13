@@ -1,6 +1,7 @@
-package ma.hiresync.auth;
+package ma.hiresync.auth.service;
 
 import lombok.RequiredArgsConstructor;
+import ma.hiresync.auth.repository.UserRepository;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
