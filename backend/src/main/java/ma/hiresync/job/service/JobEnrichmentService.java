@@ -206,10 +206,10 @@ public class JobEnrichmentService {
     private LinkedInCriteria extractLinkedInCriteria(Document doc) {
         Elements items = doc.select("ul.description__job-criteria-list > li.description__job-criteria-item");
 
-        String experienceLevel = criteriaValue(items, 0);
-        String contractType    = criteriaValue(items, 1);
-        String jobFunction     = criteriaValue(items, 2);
-        String industries      = criteriaValue(items, 3);
+        String experienceLevel = toFrench(criteriaValue(items, 0));
+        String contractType    = toFrench(criteriaValue(items, 1));
+        String jobFunction     = toFrench(criteriaValue(items, 2));
+        String industries      = toFrench(criteriaValue(items, 3));
 
         String sector;
         if (jobFunction != null && industries != null) {
@@ -227,6 +227,52 @@ public class JobEnrichmentService {
         if (span == null) return null;
         String text = span.text().trim();
         return text.isEmpty() ? null : text;
+    }
+
+    /**
+     * LinkedIn's "criteria" values (seniority level, employment type, job function, industries)
+     * come from a small set of controlled-vocabulary terms, but guest pages render them in
+     * whatever locale LinkedIn picks via geo-IP (Arabic for Moroccan IPs) regardless of the
+     * Accept-Language header. Since the vocabulary is fixed, we translate the terms we've
+     * seen back to French to match the language of the other scraped sources. Any term not
+     * in this table (new/unseen value, or already French/English) is returned unchanged.
+     */
+    private static final java.util.Map<String, String> LINKEDIN_AR_TO_FR = java.util.Map.ofEntries(
+            // Seniority level
+            java.util.Map.entry("غير مطبق", "Non précisé"),
+            java.util.Map.entry("تدريب", "Stage"),
+            java.util.Map.entry("مستوى المبتدئين", "Débutant"),
+            java.util.Map.entry("معاون", "Associé"),
+            java.util.Map.entry("مستوى متوسط الأقدمية", "Niveau intermédiaire/senior"),
+            java.util.Map.entry("مدير", "Directeur"),
+            java.util.Map.entry("تنفيذي", "Cadre dirigeant"),
+            // Employment type
+            java.util.Map.entry("دوام كامل", "Temps plein"),
+            java.util.Map.entry("دوام جزئي", "Temps partiel"),
+            java.util.Map.entry("عقد", "Contrat"),
+            java.util.Map.entry("عمل مؤقت", "Intérim"),
+            java.util.Map.entry("تطوع", "Bénévolat"),
+            java.util.Map.entry("أخرى", "Autre"),
+            // Job function / Industries (best-effort, extend as new values appear)
+            java.util.Map.entry("غير ذلك", "Autre"),
+            java.util.Map.entry("المشتريات و سلسلة التوريدات", "Achats et chaîne d'approvisionnement"),
+            java.util.Map.entry("النفط والغاز", "Pétrole et gaz"),
+            java.util.Map.entry("الهندسة و تكنولوجيا المعلومات", "Ingénierie et informatique"),
+            java.util.Map.entry("الخدمات الهندسية", "Services d'ingénierie"),
+            java.util.Map.entry("الإدارة و التصنيع", "Gestion et production"),
+            java.util.Map.entry("المحاسبة / تدقيق الحسابات و مالية", "Comptabilité / Audit et finance"),
+            java.util.Map.entry("تأمين الجودة", "Assurance qualité"),
+            java.util.Map.entry("خدمات الموارد البشرية", "Services de ressources humaines"),
+            java.util.Map.entry("الموارد البشرية", "Ressources humaines"),
+            java.util.Map.entry("تطوير الأعمال التجارية و المبيعات", "Développement commercial et ventes"),
+            java.util.Map.entry("المبيعات و تطوير الأعمال التجارية", "Ventes et développement commercial"),
+            java.util.Map.entry("خدمات الرعاية الصحية", "Services de santé"),
+            java.util.Map.entry("تكنولوجيا المعلومات", "Informatique")
+    );
+
+    private String toFrench(String value) {
+        if (value == null) return null;
+        return LINKEDIN_AR_TO_FR.getOrDefault(value, value);
     }
 
     /**
