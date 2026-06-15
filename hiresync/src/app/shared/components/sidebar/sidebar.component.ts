@@ -22,6 +22,7 @@ interface NavItem {
 })
 export class SidebarComponent {
   @Input()  collapsed = false;
+  @Input()  mobileOpen = false;
   @Output() toggleCollapse = new EventEmitter<void>();
 
   auth    = inject(AuthService);

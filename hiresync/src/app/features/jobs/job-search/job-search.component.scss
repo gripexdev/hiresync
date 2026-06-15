@@ -80,10 +80,11 @@ $primary: #2E86AB; $accent: #17A589;
 .filter-form { display: flex; flex-direction: column; gap: 8px; }
 
 // ── Job cards ──────────────────────────────────────────────────────────────────
-.job-results { display: flex; flex-direction: column; gap: 16px; }
+.job-results { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 
 .job-card {
   padding: 20px;
+  min-width: 0;
   cursor: pointer;
   transition: box-shadow 0.2s, transform 0.15s;
   &:hover { box-shadow: 0 10px 25px -3px rgba(0,0,0,.1); transform: translateY(-1px); }
@@ -152,6 +153,37 @@ $primary: #2E86AB; $accent: #17A589;
   &--contract { background: #F0FDF4; color: #166534; }
   &--level    { background: #FAF5FF; color: #6B21A8; }
   &--salary   { background: #FFF7ED; color: #9A3412; }
+}
+
+// ── Small screens — cramped header/footer need to stack ─────────────────────────
+@media (max-width: 480px) {
+  .job-card {
+    padding: 16px;
+
+    &__header { gap: 10px; }
+
+    &__logo { width: 36px; height: 36px; }
+
+    &__title {
+      white-space: normal;
+      overflow: hidden;
+      text-overflow: unset;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    &__match {
+      padding: 3px 8px;
+      font-size: 12px;
+    }
+
+    &__footer { flex-direction: column; align-items: stretch; }
+
+    &__source { flex: unset; }
+
+    &__cta { margin-left: 0; width: 100%; justify-content: center; }
+  }
 }
 
 // ── Pagination ─────────────────────────────────────────────────────────────────

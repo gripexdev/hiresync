@@ -338,5 +338,11 @@ html, body {
     @media (max-width: 768px) {
       padding: 16px;
     }
+
+    // Clear the fixed hamburger button (top:12px, 40px tall) that appears
+    // once the sidebar becomes an off-canvas drawer.
+    @media (max-width: 900px) {
+      padding-top: 64px;
+    }
   }
 }
