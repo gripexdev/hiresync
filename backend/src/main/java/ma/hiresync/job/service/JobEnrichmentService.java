@@ -68,14 +68,23 @@ public class JobEnrichmentService {
 
     // ── Per-job detail fetch ──────────────────────────────────────────────────
 
+    // LinkedIn's bot-detection returns HTTP 999 for the generic HireSync-Bot UA on
+    // /jobs/view/ pages — a real browser UA + Accept-Language is needed there.
+    private static final String LINKEDIN_USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
     private void enrichOne(Job job) throws Exception {
         log.info("Enriching job {} → {}", job.getId(), job.getSourceUrl());
 
-        Document doc = Jsoup.connect(job.getSourceUrl())
-                .userAgent(USER_AGENT)
-                .referrer("https://www." + job.getSource())
-                .timeout(12_000)
-                .get();
+        var connection = Jsoup.connect(job.getSourceUrl()).timeout(12_000);
+        if ("linkedin.com".equals(job.getSource())) {
+            connection.userAgent(LINKEDIN_USER_AGENT)
+                       .header("Accept-Language", "fr-FR,fr;q=0.9");
+        } else {
+            connection.userAgent(USER_AGENT)
+                       .referrer("https://www." + job.getSource());
+        }
+        Document doc = connection.get();
 
         String description;
         List<String> requirements;
@@ -84,6 +93,9 @@ public class JobEnrichmentService {
             requirements = extractEmploiMaSkills(doc);
         } else if ("indeed.ma".equals(job.getSource())) {
             description  = extractIndeedDescription(doc);
+            requirements = List.of();
+        } else if ("linkedin.com".equals(job.getSource())) {
+            description  = extractLinkedInDescription(doc);
             requirements = List.of();
         } else {
             description  = extractRekruteDescription(doc);
@@ -151,6 +163,54 @@ public class JobEnrichmentService {
     /** Job description lives in {@code div#jobDescriptionText} ({@code <p>} and {@code <ul><li>} children). */
     private String extractIndeedDescription(Document doc) {
         return divToText(doc.selectFirst("div#jobDescriptionText"));
+    }
+
+    // ── linkedin.com extraction ───────────────────────────────────────────────
+
+    /**
+     * Job description lives in {@code div.show-more-less-html__markup} — unlike the
+     * other sources, its content is mostly inline ({@code <br>}, {@code <strong>}, text)
+     * with the occasional {@code <ul><li>}, not wrapped in top-level {@code <p>} tags.
+     */
+    private String extractLinkedInDescription(Document doc) {
+        Element markup = doc.selectFirst("div.show-more-less-html__markup");
+        if (markup == null) return null;
+        StringBuilder sb = new StringBuilder();
+        htmlToText(markup, sb);
+        String result = sb.toString()
+                .replaceAll("[ \\t]+", " ")
+                .replaceAll(" \\n", "\n")
+                .replaceAll("\\n ", "\n")
+                .replaceAll("\\n{3,}", "\n\n")
+                .trim();
+        return result.isEmpty() ? null : result;
+    }
+
+    /**
+     * Recursively flattens an element's content to text: {@code <br>} → \n,
+     * {@code <li>} → "- " prefixed line, {@code <p>}/{@code <ul>} → paragraph break.
+     * Other elements (e.g. {@code <strong>}) are unwrapped in place.
+     */
+    private void htmlToText(Element el, StringBuilder sb) {
+        for (Node node : el.childNodes()) {
+            if (node instanceof TextNode tn) {
+                sb.append(tn.text());
+            } else if (node instanceof Element child) {
+                switch (child.tagName()) {
+                    case "br" -> sb.append("\n");
+                    case "li" -> {
+                        sb.append("\n- ");
+                        htmlToText(child, sb);
+                        sb.append("\n");
+                    }
+                    case "ul", "ol", "p" -> {
+                        htmlToText(child, sb);
+                        sb.append("\n\n");
+                    }
+                    default -> htmlToText(child, sb);
+                }
+            }
+        }
     }
 
     /**

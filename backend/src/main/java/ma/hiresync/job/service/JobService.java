@@ -25,6 +25,7 @@ public class JobService {
     private final JobScraperService      rekruteScraper;
     private final EmploiMaScraperService emploiMaScraper;
     private final IndeedScraperService   indeedScraper;
+    private final LinkedInScraperService linkedInScraper;
     private final JobEnrichmentService   enricher;
 
     /** Paginated job search (empty {@code q} returns everything). */
@@ -38,7 +39,7 @@ public class JobService {
 
     /** Runs all scrapers synchronously and reports how many new jobs were saved. */
     public ScrapeTriggerResponse triggerScrape() {
-        int saved = rekruteScraper.scrape() + emploiMaScraper.scrape() + indeedScraper.scrape();
+        int saved = rekruteScraper.scrape() + emploiMaScraper.scrape() + indeedScraper.scrape() + linkedInScraper.scrape();
         long total = jobRepository.count();
         return new ScrapeTriggerResponse(saved, total);
     }
