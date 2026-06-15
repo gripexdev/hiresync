@@ -18,9 +18,9 @@
             <div class="detail-header__info">
               <h1>{{ job.title }}</h1>
               <div class="detail-header__meta">
-                <span><mat-icon>business</mat-icon>{{ job.company }}</span>
-                <span><mat-icon>location_on</mat-icon>{{ job.location }}</span>
-                <span><mat-icon>work</mat-icon>{{ job.contractType }}</span>
+                <span><mat-icon>business</mat-icon>{{ job.company || 'Entreprise confidentielle' }}</span>
+                @if (job.location) { <span><mat-icon>location_on</mat-icon>{{ job.location }}</span> }
+                @if (job.contractType) { <span><mat-icon>work</mat-icon>{{ job.contractType }}</span> }
                 @if (job.salary) { <span><mat-icon>payments</mat-icon>{{ job.salary }}</span> }
               </div>
             </div>
@@ -131,7 +131,7 @@
         <div class="hs-card sidebar-card">
           <h3><mat-icon>info</mat-icon> Détails du poste</h3>
           <div class="info-rows">
-            <div class="info-row"><mat-icon>work</mat-icon><span>{{ job.contractType }}</span></div>
+            @if (job.contractType) { <div class="info-row"><mat-icon>work</mat-icon><span>{{ job.contractType }}</span></div> }
             @if (job.experienceLevel) { <div class="info-row"><mat-icon>trending_up</mat-icon><span>{{ job.experienceLevel }}</span></div> }
             @if (job.sector) { <div class="info-row"><mat-icon>category</mat-icon><span>{{ job.sector }}</span></div> }
             <div class="info-row"><mat-icon>source</mat-icon><span>Source : {{ job.source }}</span></div>

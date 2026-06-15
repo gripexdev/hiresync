@@ -54,4 +54,11 @@ export class JobSelectorDialogComponent implements OnInit {
     if (!score) return '';
     return score >= 80 ? 'match--high' : score >= 60 ? 'match--med' : 'match--low';
   }
+
+  /** Joins company/location/contractType with " · ", skipping whichever are missing (some sources don't have all three). */
+  jobMeta(job: Job): string {
+    return [job.company || 'Entreprise confidentielle', job.location, job.contractType]
+      .filter((part): part is string => !!part)
+      .join(' · ');
+  }
 }

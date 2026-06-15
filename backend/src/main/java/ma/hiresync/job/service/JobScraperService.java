@@ -95,6 +95,7 @@ public class JobScraperService {
                         .replaceAll("\\s*\\([^)]*\\)\\s*$", "")  // remove "(Maroc)"
                         .trim();
             }
+            if (title.isEmpty()) continue;
 
             // ── Company + Logo ─────────────────────────────────────────────
             // <img class="photo" src="/rekrute/file/jobOfferLogo/..." alt="Company Name">

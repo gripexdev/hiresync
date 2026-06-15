@@ -25,10 +25,10 @@
       <div class="job-option"
            [class.job-option--selected]="selected()?.id === job.id"
            (click)="select(job)">
-        <img [src]="job.logoUrl" [alt]="job.company" class="job-option__logo" />
+        @if (job.logoUrl) { <img [src]="job.logoUrl" [alt]="job.company" class="job-option__logo" /> }
         <div class="job-option__info">
           <span class="job-option__title">{{ job.title }}</span>
-          <span class="job-option__meta">{{ job.company }} · {{ job.location }} · {{ job.contractType }}</span>
+          <span class="job-option__meta">{{ jobMeta(job) }}</span>
         </div>
         @if (job.matchScore) {
           <span class="job-option__match" [ngClass]="matchClass(job.matchScore)">{{ job.matchScore }}%</span>

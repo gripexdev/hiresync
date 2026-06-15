@@ -92,11 +92,7 @@ public class IndeedScraperService {
 
             String company = textOrNull(r.path("company"));
             String location = textOrNull(r.path("formattedLocation"));
-            String contractType = StreamSupport.stream(r.path("jobTypes").spliterator(), false)
-                    .map(JsonNode::asText)
-                    .filter(s -> !s.isBlank())
-                    .collect(Collectors.joining(", "));
-            if (contractType.isEmpty()) contractType = null;
+            String contractType = extractContractType(r);
 
             String description = snippetToText(r.path("snippet").asText(null));
 
@@ -166,6 +162,30 @@ public class IndeedScraperService {
     private String textOrNull(JsonNode node) {
         String text = node.asText("").trim();
         return text.isEmpty() ? null : text;
+    }
+
+    /**
+     * The {@code jobTypes} array is empty for most results; the same information
+     * ("Temps plein", "CDI"...) is usually still present under
+     * {@code taxonomyAttributes[].label == "job-types"}. Falls back to that, and
+     * returns {@code null} (rather than an empty string) if neither is present.
+     */
+    private String extractContractType(JsonNode r) {
+        String fromJobTypes = StreamSupport.stream(r.path("jobTypes").spliterator(), false)
+                .map(JsonNode::asText)
+                .filter(s -> !s.isBlank())
+                .collect(Collectors.joining(", "));
+        if (!fromJobTypes.isEmpty()) return fromJobTypes;
+
+        for (JsonNode taxo : r.path("taxonomyAttributes")) {
+            if (!"job-types".equals(taxo.path("label").asText())) continue;
+            String fromTaxo = StreamSupport.stream(taxo.path("attributes").spliterator(), false)
+                    .map(a -> a.path("label").asText(""))
+                    .filter(s -> !s.isBlank())
+                    .collect(Collectors.joining(", "));
+            return fromTaxo.isEmpty() ? null : fromTaxo;
+        }
+        return null;
     }
 
     /** Converts the card's HTML {@code snippet} (a {@code <ul><li>} list, occasionally with stray text) to plain text. */

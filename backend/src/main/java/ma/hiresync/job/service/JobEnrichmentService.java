@@ -92,6 +92,9 @@ public class JobEnrichmentService {
         if ("emploi.ma".equals(job.getSource())) {
             description  = extractEmploiMaDescription(doc);
             requirements = extractEmploiMaSkills(doc);
+
+            String sector = extractEmploiMaSector(doc);
+            if (sector != null) job.setSector(sector);
         } else if ("indeed.ma".equals(job.getSource())) {
             description  = extractIndeedDescription(doc);
             requirements = List.of();
@@ -162,6 +165,24 @@ public class JobEnrichmentService {
                 .filter(s -> !s.isEmpty())
                 .distinct()
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * The activity sector ("Secteur d'activité") isn't on the listing card — only
+     * on the detail page, inside {@code div.card-block-company}'s {@code <li>} list.
+     * Not every company profile fills it in, so a missing/empty value is tolerated
+     * (the job simply keeps {@code sector = null}).
+     */
+    private String extractEmploiMaSector(Document doc) {
+        for (Element li : doc.select("div.card-block-company li")) {
+            Element strong = li.selectFirst("strong");
+            if (strong == null || !strong.text().trim().startsWith("Secteur")) continue;
+            Element field = li.selectFirst("div.field-item");
+            if (field == null) return null;
+            String text = field.text().trim();
+            return text.isEmpty() ? null : text;
+        }
+        return null;
     }
 
     // ── indeed.ma extraction ──────────────────────────────────────────────────
