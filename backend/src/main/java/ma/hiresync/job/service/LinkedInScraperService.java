@@ -92,10 +92,13 @@ public class LinkedInScraperService {
                 postedAt = parseDate(timeEl.attr("datetime").trim());
             }
 
+            String logoUrl = attrOrNull(card.selectFirst("img.artdeco-entity-image"), "data-delayed-url");
+
             toSave.add(Job.builder()
                     .title(title)
                     .company(company)
                     .location(location)
+                    .logoUrl(logoUrl)
                     .sourceUrl(sourceUrl)
                     .source(SOURCE)
                     .postedAt(postedAt)
@@ -113,6 +116,13 @@ public class LinkedInScraperService {
         if (el == null) return null;
         String text = el.text().trim();
         return text.isEmpty() ? null : text;
+    }
+
+    /** Reads an attribute (e.g. the company logo's {@code data-delayed-url}), tolerating a missing element/attribute. */
+    private String attrOrNull(Element el, String attr) {
+        if (el == null) return null;
+        String value = el.attr(attr).trim();
+        return value.isEmpty() ? null : value;
     }
 
     /** Parse "2026-06-10" (the {@code <time datetime>} attribute) → LocalDateTime (midnight) */

@@ -9,6 +9,7 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 import org.jsoup.nodes.TextNode;
+import org.jsoup.select.Elements;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -97,6 +98,11 @@ public class JobEnrichmentService {
         } else if ("linkedin.com".equals(job.getSource())) {
             description  = extractLinkedInDescription(doc);
             requirements = List.of();
+
+            LinkedInCriteria criteria = extractLinkedInCriteria(doc);
+            if (criteria.experienceLevel() != null) job.setExperienceLevel(criteria.experienceLevel());
+            if (criteria.contractType() != null)    job.setContractType(criteria.contractType());
+            if (criteria.sector() != null)          job.setSector(criteria.sector());
         } else {
             description  = extractRekruteDescription(doc);
             requirements = extractRekruteSkills(doc);
@@ -184,6 +190,43 @@ public class JobEnrichmentService {
                 .replaceAll("\\n{3,}", "\n\n")
                 .trim();
         return result.isEmpty() ? null : result;
+    }
+
+    /** Seniority level, employment type and job function/industries — read from the "criteria" list. */
+    private record LinkedInCriteria(String experienceLevel, String contractType, String sector) {}
+
+    /**
+     * The criteria list ({@code ul.description__job-criteria-list > li.description__job-criteria-item})
+     * always renders the same 4 fields in the same order — Seniority level, Employment type,
+     * Job function, Industries — but the {@code <h3>} labels are translated by LinkedIn into
+     * whatever locale it served the page in (Arabic/French/English), so matching on label text
+     * is unreliable. We read by position instead, and tolerate fewer than 4 items (or none)
+     * by leaving the corresponding job fields untouched.
+     */
+    private LinkedInCriteria extractLinkedInCriteria(Document doc) {
+        Elements items = doc.select("ul.description__job-criteria-list > li.description__job-criteria-item");
+
+        String experienceLevel = criteriaValue(items, 0);
+        String contractType    = criteriaValue(items, 1);
+        String jobFunction     = criteriaValue(items, 2);
+        String industries      = criteriaValue(items, 3);
+
+        String sector;
+        if (jobFunction != null && industries != null) {
+            sector = jobFunction + " / " + industries;
+        } else {
+            sector = jobFunction != null ? jobFunction : industries;
+        }
+
+        return new LinkedInCriteria(experienceLevel, contractType, sector);
+    }
+
+    private String criteriaValue(Elements items, int index) {
+        if (index >= items.size()) return null;
+        Element span = items.get(index).selectFirst("span.description__job-criteria-text");
+        if (span == null) return null;
+        String text = span.text().trim();
+        return text.isEmpty() ? null : text;
     }
 
     /**
