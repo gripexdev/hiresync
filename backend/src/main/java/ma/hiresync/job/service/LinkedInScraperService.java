@@ -20,9 +20,10 @@ import java.util.List;
  * Returns plain HTML job cards (no embedded JSON, unlike indeed.ma), and the
  * linked {@code /jobs/view/...} detail pages are publicly readable too.
  *
- * Only page 1 is scraped: a second request with {@code &start=10} came back
- * empty in testing — LinkedIn's anti-bot throttles guest requests fast, so
- * pagination beyond the first ~10 results isn't reliably accessible.
+ * Pages through {@code &start=0,10,20,...} up to {@link #MAX_PAGES} pages
+ * (10 results each). LinkedIn's anti-bot can throttle/empty out guest
+ * pagination unpredictably, so we stop as soon as a page comes back empty
+ * or fails — whatever was gathered from earlier pages is still saved.
  */
 @Service
 @RequiredArgsConstructor
@@ -32,30 +33,46 @@ public class LinkedInScraperService {
     private static final String SOURCE   = "linkedin.com";
     private static final String BASE_URL = "https://www.linkedin.com";
 
-    // Guest job search — first page only (10 results).
+    private static final int PAGE_SIZE = 10;
+    private static final int MAX_PAGES = 3;
+
+    // Guest job search — &start=0,10,20,... for subsequent pages.
     private static final String SEARCH_URL =
-            BASE_URL + "/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=offre+d%27emploi&location=Morocco&start=0";
+            BASE_URL + "/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=offre+d%27emploi&location=Morocco&start=";
 
     private final JobRepository jobRepository;
 
     // ── Public entry point ────────────────────────────────────────────────────
 
     public int scrape() {
-        log.info("Scraping linkedin.com → {}", SEARCH_URL);
-        Document doc;
-        try {
-            doc = Jsoup.connect(SEARCH_URL)
-                    .userAgent("Mozilla/5.0 (compatible; HireSync-Bot/1.0; +https://hiresync.ma)")
-                    .header("Accept-Language", "fr-FR,fr;q=0.9")
-                    .referrer(BASE_URL)
-                    .timeout(15_000)
-                    .get();
-        } catch (IOException e) {
-            log.error("Failed to fetch linkedin.com search page: {}", e.getMessage());
-            return 0;
+        int saved = 0;
+        for (int page = 0; page < MAX_PAGES; page++) {
+            int start = page * PAGE_SIZE;
+            String url = SEARCH_URL + start;
+            log.info("Scraping linkedin.com → {}", url);
+
+            Document doc;
+            try {
+                doc = Jsoup.connect(url)
+                        .userAgent("Mozilla/5.0 (compatible; HireSync-Bot/1.0; +https://hiresync.ma)")
+                        .header("Accept-Language", "fr-FR,fr;q=0.9")
+                        .referrer(BASE_URL)
+                        .timeout(15_000)
+                        .get();
+            } catch (IOException e) {
+                log.warn("Failed to fetch linkedin.com search page (start={}): {} — stopping pagination", start, e.getMessage());
+                break;
+            }
+
+            int savedOnPage = parsePage(doc);
+            saved += savedOnPage;
+
+            if (doc.select("div.base-search-card").isEmpty()) {
+                log.info("linkedin.com page (start={}) had no job cards — stopping pagination", start);
+                break;
+            }
         }
 
-        int saved = parsePage(doc);
         log.info("linkedin.com scrape finished — {} new jobs saved", saved);
         return saved;
     }
@@ -64,10 +81,6 @@ public class LinkedInScraperService {
 
     private int parsePage(Document doc) {
         var cards = doc.select("div.base-search-card");
-        if (cards.isEmpty()) {
-            log.warn("No job cards found on linkedin.com search page (title: '{}')", doc.title());
-            return 0;
-        }
 
         List<Job> toSave = new ArrayList<>();
         for (Element card : cards) {
