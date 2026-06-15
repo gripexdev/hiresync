@@ -24,6 +24,7 @@
      - [4.9.2 Source A — rekrute.com (HTML classique)](#492-source-a--rekrutecom-html-classique)
      - [4.9.3 Source B — emploi.ma (HTML classique)](#493-source-b--emploima-html-classique)
      - [4.9.4 Source C — Indeed Maroc (JSON embarqué)](#494-source-c--indeed-maroc-json-embarqué)
+     - [4.9.5 Source D — LinkedIn (recherche invité)](#495-source-d--linkedin-recherche-invité)
    - [4.10 Enrichissement des descriptions (source-aware)](#410-enrichissement-des-descriptions-source-aware)
    - [4.11 Pagination côté serveur](#411-pagination-côté-serveur)
 5. [Lancer le projet](#5-lancer-le-projet)
@@ -430,7 +431,7 @@ Si le CV uploadé est mal parsé (texte brut non structuré), l'utilisateur peut
 | Login | `/login` | `POST /api/auth/login` → JWT |
 | Register | `/register` | `POST /api/auth/register` → JWT |
 | Dashboard | `/dashboard` | Stats candidatures + notifications récentes (mock job/app data) |
-| **Recherche offres** | `/jobs` | **RÉEL** — offres scrapées depuis rekrute.com + emploi.ma + Indeed, pagination, filtres, barre admin |
+| **Recherche offres** | `/jobs` | **RÉEL** — offres scrapées depuis rekrute.com + emploi.ma + Indeed + LinkedIn, pagination, filtres, barre admin |
 | **Détail offre** | `/jobs/:id` | **RÉEL** — description enrichie structurée, compétences, bouton "Optimiser CV" |
 | **Mon CV** | `/cv` | **RÉEL** — upload PDF, ATS réel, sections extraites, historique |
 | **Optimizer** | `/cv/optimize/:id` | **RÉEL** — loading IA animé, résultat Gemma 4, avant/après |
@@ -452,47 +453,50 @@ Tous les appels HTTP Angular ont automatiquement le header `Authorization: Beare
 
 #### 4.9.1 Vue d'ensemble & orchestration
 
-HireSync agrège automatiquement les offres d'emploi de **trois job boards marocains** et les stocke dans une **table `jobs` unifiée** en PostgreSQL. Chaque source a son propre service de scraping, mais tous partagent la **même entité `Job`**, la **même clé de déduplication** (`sourceUrl` unique) et le **même pipeline en deux passes** : une passe rapide de **collecte** (listing) puis une passe d'**enrichissement** (page détail).
+HireSync agrège automatiquement les offres d'emploi de **quatre job boards marocains** (dont LinkedIn) et les stocke dans une **table `jobs` unifiée** en PostgreSQL. Chaque source a son propre service de scraping, mais tous partagent la **même entité `Job`**, la **même clé de déduplication** (`sourceUrl` unique) et le **même pipeline en deux passes** : une passe rapide de **collecte** (listing) puis une passe d'**enrichissement** (page détail).
 
 | Source | Service | Champ `source` | Technique de collecte | Pourquoi cette technique |
 |--------|---------|----------------|-----------------------|--------------------------|
 | **rekrute.com** | `JobScraperService` | `"rekrute.com"` | Jsoup → parsing du DOM HTML (`<li class="post-id">`) | Les offres sont rendues côté serveur dans le HTML → parsing DOM direct |
 | **emploi.ma** | `EmploiMaScraperService` | `"emploi.ma"` | Jsoup → parsing du DOM HTML (`<div class="card-job">`) | Idem — listing server-side, structure en cartes |
 | **Indeed Maroc** | `IndeedScraperService` | `"indeed.ma"` | Jsoup (fetch) + Jackson → **JSON embarqué** dans un `<script>` | Indeed ne rend **pas** les offres en HTML ; elles sont injectées en JSON dans `window.mosaic` |
+| **LinkedIn** | `LinkedInScraperService` | `"linkedin.com"` | Jsoup → parsing du DOM HTML (`<div class="base-search-card">`), endpoint "guest" public | Pas de login requis ; le endpoint de recherche invité rend les cartes en HTML pur |
 
 **Orchestration — `JobService.triggerScrape()` :**
 
-Les trois scrapers sont appelés séquentiellement et leurs compteurs additionnés. Le contrôleur ne parle qu'à `JobService` :
+Les quatre scrapers sont appelés séquentiellement et leurs compteurs additionnés. Le contrôleur ne parle qu'à `JobService` :
 
 ```java
 // JobService.java
 public ScrapeTriggerResponse triggerScrape() {
     int saved = rekruteScraper.scrape()      // rekrute.com
               + emploiMaScraper.scrape()      // emploi.ma
-              + indeedScraper.scrape();       // indeed.ma
+              + indeedScraper.scrape()        // indeed.ma
+              + linkedInScraper.scrape();     // linkedin.com
     long total = jobRepository.count();
     return new ScrapeTriggerResponse(saved, total);
 }
 ```
 
-Un seul appel à `POST /api/admin/scrape/trigger` collecte donc les offres des **trois sources** d'un coup. La déduplication par `sourceUrl` rend l'opération **idempotente** quelle que soit la source.
+Un seul appel à `POST /api/admin/scrape/trigger` collecte donc les offres des **quatre sources** d'un coup. La déduplication par `sourceUrl` rend l'opération **idempotente** quelle que soit la source.
 
-**Choix de conception communs (les 3 scrapers) :**
+**Choix de conception communs (les 4 scrapers) :**
 
 - **Jsoup** comme client HTTP + parseur — une seule dépendance pour `connect().get()` *et* le parsing DOM, plus léger qu'un navigateur headless.
-- **Pas de navigateur headless (Playwright)** pour le scraping — il n'est utilisé que pour le rendu PDF du CV Studio (§4.7). Les trois sources sont accessibles en HTTP simple, donc inutile de payer le coût d'un Chromium.
-- **User-Agent honnête** : `Mozilla/5.0 (compatible; HireSync-Bot/1.0; +https://hiresync.ma)` — identifie le bot plutôt que d'usurper un vrai navigateur.
+- **Pas de navigateur headless (Playwright)** pour le scraping — il n'est utilisé que pour le rendu PDF du CV Studio (§4.7). Les quatre sources sont accessibles en HTTP simple, donc inutile de payer le coût d'un Chromium.
+- **User-Agent honnête** : `Mozilla/5.0 (compatible; HireSync-Bot/1.0; +https://hiresync.ma)` — identifie le bot plutôt que d'usurper un vrai navigateur (sauf LinkedIn, voir §4.9.5 et §4.10 pour le cas particulier).
 - **`timeout(15_000)`** + `try/catch IOException` par page → un échec réseau interrompt proprement la source sans planter les autres.
 - **Déduplication avant insertion** : `if (jobRepository.existsBySourceUrl(sourceUrl)) continue;`
-- **`MAX_PAGES = 3`** (rekrute & emploi.ma) — constante en tête de service, facile à augmenter.
+- **`MAX_PAGES = 3`** (rekrute, emploi.ma & LinkedIn) — constante en tête de service, facile à augmenter.
 
 ```
-3 sources              Spring Boot                 PostgreSQL
+4 sources              Spring Boot                 PostgreSQL
     │                       │                           │
     │  [Passe 1 — Collecte] │                           │
     │◄── rekrute  (3 pages) │                           │
     │◄── emploi.ma (3 pages)│                           │
     │◄── indeed   (1 page)  │                           │
+    │◄── linkedin (3 pages) │                           │
     │                       ├─ INSERT INTO jobs ────────►│
     │                       │   (si sourceUrl inconnu)  │
     │                       │                           │
@@ -561,9 +565,9 @@ if (src.contains("confidentiel")) {
 
 ---
 
-#### Schéma de stockage (commun aux 3 sources)
+#### Schéma de stockage (commun aux 4 sources)
 
-Table **`jobs`** (PostgreSQL, gérée par Hibernate avec `ddl-auto: update`) — une seule table pour les trois job boards, distingués par la colonne `source` :
+Table **`jobs`** (PostgreSQL, gérée par Hibernate avec `ddl-auto: update`) — une seule table pour les quatre job boards, distingués par la colonne `source` :
 
 | Colonne | Type | Description |
 |---------|------|-------------|
@@ -577,7 +581,7 @@ Table **`jobs`** (PostgreSQL, gérée par Hibernate avec `ddl-auto: update`) —
 | `description` | TEXT | Texte court (collecte) → texte complet (après enrichissement) |
 | `logo_url` | VARCHAR(512) | URL du logo entreprise |
 | `source_url` | VARCHAR(1024) | URL de l'offre — **UNIQUE** (clé de dédup) |
-| `source` | VARCHAR | `"rekrute.com"`, `"emploi.ma"` ou `"indeed.ma"` |
+| `source` | VARCHAR | `"rekrute.com"`, `"emploi.ma"`, `"indeed.ma"` ou `"linkedin.com"` |
 | `posted_at` | TIMESTAMP | Date de publication originale |
 | `scraped_at` | TIMESTAMP | Date d'insertion en base |
 | `enriched` | BOOLEAN | `false` → description courte, `true` → description complète |
@@ -708,6 +712,76 @@ Demander la page 2 (`&start=10`) **redirige vers le mur de connexion** d'Indeed 
 
 ---
 
+#### 4.9.5 Source D — LinkedIn (recherche invité)
+
+`LinkedInScraperService` — `SOURCE = "linkedin.com"`, `BASE_URL = "https://www.linkedin.com"`.
+
+##### Le endpoint "guest" — pas de login requis
+
+LinkedIn expose un endpoint public de recherche d'offres, utilisé en arrière-plan par la page de résultats pour le scroll infini, accessible **sans authentification** :
+
+```
+https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=offre+d%27emploi&location=Morocco&start=N
+```
+
+Cet endpoint renvoie directement du **HTML** (des cartes `<div class="base-search-card">`), pas du JSON — contrairement à Indeed, un parsing DOM classique avec Jsoup suffit.
+
+##### Ce qui est extrait lors de la collecte (page listing)
+
+| Champ | Sélecteur Jsoup | Remarque |
+|-------|----------------|----------|
+| `sourceUrl` | `a.base-card__full-link[href]`, query string tronquée à `?` | **clé de déduplication** — l'URL brute porte des paramètres de tracking (`position`, `pageNum`, `refId`…) qu'on retire pour obtenir une clé stable |
+| `title` | `h3.base-search-card__title` | — |
+| `company` | `h4.base-search-card__subtitle` | `null` si absent |
+| `location` | `span.job-search-card__location` | ex : "Casablanca, Maroc" |
+| `logoUrl` | `img.artdeco-entity-image[data-delayed-url]` | LinkedIn charge les logos en lazy-load — l'URL réelle est dans `data-delayed-url`, pas `src` |
+| `postedAt` | `time.job-search-card__listdate[datetime]` — format ISO `yyyy-MM-dd` | parsé via `LocalDate.parse()` |
+
+`description`, `contractType`, `experienceLevel` et `sector` ne sont **pas** disponibles sur la page de listing — ils sont remplis par la passe d'enrichissement (§4.10).
+
+##### Pagination multi-pages
+
+```
+Page 1 → .../seeMoreJobPostings/search?...&start=0
+Page 2 → .../seeMoreJobPostings/search?...&start=10
+Page 3 → .../seeMoreJobPostings/search?...&start=20
+```
+
+`MAX_PAGES = 3`, `PAGE_SIZE = 10` — même principe que rekrute/emploi.ma (`start = page * PAGE_SIZE`). La boucle s'arrête **avant** la page suivante dès que :
+
+- la page courante ne contient **aucune carte** `div.base-search-card` (LinkedIn a cessé de paginer), ou
+- la requête échoue (`IOException` — anti-bot, timeout…).
+
+Dans les deux cas, ce qui a déjà été collecté sur les pages précédentes est **conservé** (`saved` n'est pas réinitialisé) — aucune exception ne remonte au déclencheur global :
+
+```java
+// LinkedInScraperService.scrape()
+for (int page = 0; page < MAX_PAGES; page++) {
+    int start = page * PAGE_SIZE;
+    Document doc;
+    try {
+        doc = Jsoup.connect(SEARCH_URL + start)
+                .userAgent("Mozilla/5.0 (compatible; HireSync-Bot/1.0; +https://hiresync.ma)")
+                .header("Accept-Language", "fr-FR,fr;q=0.9")
+                .referrer(BASE_URL)
+                .timeout(15_000)
+                .get();
+    } catch (IOException e) {
+        break; // garde ce qui a été sauvé sur les pages précédentes
+    }
+
+    saved += parsePage(doc);
+
+    if (doc.select("div.base-search-card").isEmpty()) break;
+}
+```
+
+##### Tolérance aux champs manquants
+
+Comme pour les autres sources, chaque champ est extrait via un helper qui renvoie `null` si l'élément/attribut est absent (`textOrNull`, `attrOrNull`) plutôt que de lever une exception. Seul `sourceUrl` et `title` sont obligatoires — une carte sans l'un des deux est ignorée (`continue`), le reste de la page continue d'être traité.
+
+---
+
 ### 4.10 Enrichissement des descriptions (source-aware)
 
 #### Pourquoi une deuxième passe ?
@@ -718,7 +792,7 @@ Effectuer une requête détail par offre lors du scraping initial ralentirait ex
 
 #### Aiguillage par source (`enrichOne`)
 
-Un seul service, `JobEnrichmentService`, enrichit les trois sources. Comme chaque job board a une structure HTML de détail différente, l'extraction est **aiguillée selon `job.getSource()`** :
+Un seul service, `JobEnrichmentService`, enrichit les quatre sources. Comme chaque job board a une structure HTML de détail différente, l'extraction est **aiguillée selon `job.getSource()`** :
 
 ```java
 // JobEnrichmentService.enrichOne()
@@ -728,6 +802,14 @@ if ("emploi.ma".equals(job.getSource())) {
 } else if ("indeed.ma".equals(job.getSource())) {
     description  = extractIndeedDescription(doc);      // div#jobDescriptionText
     requirements = List.of();                          // pas de liste de skills propre sur Indeed
+} else if ("linkedin.com".equals(job.getSource())) {
+    description  = extractLinkedInDescription(doc);    // div.show-more-less-html__markup
+    requirements = List.of();                          // pas de liste de skills propre sur LinkedIn
+
+    LinkedInCriteria criteria = extractLinkedInCriteria(doc); // seniority / contrat / secteur
+    if (criteria.experienceLevel() != null) job.setExperienceLevel(criteria.experienceLevel());
+    if (criteria.contractType() != null)    job.setContractType(criteria.contractType());
+    if (criteria.sector() != null)          job.setSector(criteria.sector());
 } else {
     description  = extractRekruteDescription(doc);     // div.blc "Poste" + "Profil"
     requirements = extractRekruteSkills(doc);          // span.tagSkills
@@ -739,8 +821,9 @@ if ("emploi.ma".equals(job.getSource())) {
 | rekrute.com | `div.blc` dont le `<h2>` contient "Poste" / "Profil" | `span.tagSkills` |
 | emploi.ma | `div.job-description` + `div.job-qualifications` | `ul.skills li` |
 | indeed.ma | `div#jobDescriptionText` | *(aucun — Indeed n'expose pas de liste de compétences propre)* |
+| linkedin.com | `div.show-more-less-html__markup` | *(aucun — remplacé par `experienceLevel`/`contractType`/`sector` extraits du même passage, voir ci-dessous)* |
 
-Tous réutilisent le même helper de conversion DOM→texte (`divToText` / `nodeToText`, voir plus bas) pour préserver la structure en paragraphes et puces.
+Tous réutilisent le même helper de conversion DOM→texte (`divToText` / `nodeToText`, voir plus bas) pour préserver la structure en paragraphes et puces — sauf LinkedIn, qui a sa propre variante (`htmlToText`, voir ci-dessous) car son HTML est principalement constitué de texte et de balises inline (`<br>`, `<strong>`) plutôt que de `<p>` de premier niveau.
 
 #### Ce que l'enrichissement extrait — cas rekrute.com
 
@@ -812,6 +895,98 @@ La description finale en base est :
 {texte Poste}\n\nProfil recherché :\n{texte Profil}
 ```
 
+#### Ce que l'enrichissement extrait — cas LinkedIn
+
+##### User-Agent dédié — l'erreur HTTP 999
+
+Le User-Agent commun (`HireSync-Bot/1.0`) fonctionne pour les pages de listing, mais les pages de détail `/jobs/view/...` répondent **HTTP 999** (code maison de blocage anti-bot de LinkedIn) à toute requête qui n'a pas l'air d'un vrai navigateur. La solution est un User-Agent **dédié à LinkedIn**, utilisé uniquement pour l'enrichissement de cette source :
+
+```java
+// JobEnrichmentService.java
+private static final String LINKEDIN_USER_AGENT =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
+var connection = Jsoup.connect(job.getSourceUrl()).timeout(12_000);
+if ("linkedin.com".equals(job.getSource())) {
+    connection.userAgent(LINKEDIN_USER_AGENT)
+               .header("Accept-Language", "fr-FR,fr;q=0.9");
+} else {
+    connection.userAgent(USER_AGENT)
+               .referrer("https://www." + job.getSource());
+}
+```
+
+> ⚠️ Une piste explorée puis abandonnée : forcer le cookie `lang=v=2&lang=fr-FR` pour obtenir directement une page en français. Testé isolément (curl) il fonctionnait, mais une fois utilisé en série sur toutes les offres il a fait retomber **toutes** les requêtes en HTTP 999 — retiré. La traduction des champs "criteria" passe donc par le dictionnaire AR→FR décrit plus bas.
+
+##### Description — `div.show-more-less-html__markup` et `htmlToText`
+
+La description complète d'une offre LinkedIn vit dans `div.show-more-less-html__markup`. Contrairement aux autres sources, ce bloc est surtout composé de **texte et de balises inline** (`<br>`, `<strong>`) avec occasionnellement des `<ul><li>`, plutôt que d'une suite de `<p>` de premier niveau — `divToText`/`nodeToText` ne convient donc pas tel quel. Un helper dédié, `htmlToText`, parcourt récursivement le DOM :
+
+```java
+// JobEnrichmentService.java
+private void htmlToText(Element el, StringBuilder sb) {
+    for (Node node : el.childNodes()) {
+        if (node instanceof TextNode tn) {
+            sb.append(tn.text());
+        } else if (node instanceof Element child) {
+            switch (child.tagName()) {
+                case "br" -> sb.append("\n");
+                case "li" -> { sb.append("\n- "); htmlToText(child, sb); sb.append("\n"); }
+                case "ul", "ol", "p" -> { htmlToText(child, sb); sb.append("\n\n"); }
+                default -> htmlToText(child, sb);  // <strong> etc. — déballé en place
+            }
+        }
+    }
+}
+```
+
+Le résultat est ensuite nettoyé (espaces multiples, sauts de ligne en trop) par les mêmes regex de normalisation que les autres sources.
+
+##### Champs "criteria" — `experienceLevel`, `contractType`, `sector`
+
+La page de détail contient une liste `ul.description__job-criteria-list > li.description__job-criteria-item` avec **toujours 4 entrées dans le même ordre** : *Seniority level*, *Employment type*, *Job function*, *Industries*. Le `<h3>` de chaque entrée est un libellé **traduit par LinkedIn selon la locale géo-IP** (arabe pour les IP marocaines, quel que soit le header `Accept-Language`) — donc peu fiable pour matcher par texte. On lit donc **par position** :
+
+```java
+// JobEnrichmentService.java
+private LinkedInCriteria extractLinkedInCriteria(Document doc) {
+    Elements items = doc.select("ul.description__job-criteria-list > li.description__job-criteria-item");
+
+    String experienceLevel = toFrench(criteriaValue(items, 0)); // Seniority level
+    String contractType    = toFrench(criteriaValue(items, 1)); // Employment type
+    String jobFunction     = toFrench(criteriaValue(items, 2)); // Job function
+    String industries      = toFrench(criteriaValue(items, 3)); // Industries
+
+    String sector = (jobFunction != null && industries != null)
+            ? jobFunction + " / " + industries
+            : jobFunction != null ? jobFunction : industries;
+
+    return new LinkedInCriteria(experienceLevel, contractType, sector);
+}
+```
+
+`criteriaValue(items, index)` renvoie `null` si l'élément à cette position n'existe pas ou si son `span.description__job-criteria-text` est vide — donc 0 à 4 critères présents sont tous gérés sans erreur, et seuls les champs non-`null` sont écrits sur l'entité `Job` (les valeurs précédentes, si déjà renseignées, sont préservées).
+
+##### Dictionnaire AR→FR (`LINKEDIN_AR_TO_FR`)
+
+Les valeurs "criteria" proviennent d'un **vocabulaire fixe et restreint** (une douzaine de niveaux de séniorité, types de contrat, secteurs...), mais LinkedIn les sert en **arabe pour les requêtes géolocalisées au Maroc**. Plutôt que de risquer un nouveau blocage 999 en bricolant les headers/cookies, `toFrench()` traduit ces termes connus vers le français via une `Map<String, String>` statique :
+
+```java
+// JobEnrichmentService.java
+private static final Map<String, String> LINKEDIN_AR_TO_FR = Map.ofEntries(
+        Map.entry("غير مطبق", "Non précisé"),
+        Map.entry("دوام كامل", "Temps plein"),
+        Map.entry("تكنولوجيا المعلومات", "Informatique"),
+        // ... ~20 entrées au total (séniorité, type de contrat, secteurs)
+);
+
+private String toFrench(String value) {
+    if (value == null) return null;
+    return LINKEDIN_AR_TO_FR.getOrDefault(value, value); // terme inconnu → renvoyé tel quel
+}
+```
+
+Tout terme absent du dictionnaire (nouvelle valeur jamais vue, ou déjà en français/anglais) est **renvoyé inchangé** — le français est utilisé en priorité quand on sait le traduire, sinon le texte original de LinkedIn est conservé tel quel plutôt que de bloquer l'enrichissement.
+
 #### Comportement du flag `enriched`
 
 | Valeur | Signification |
@@ -825,9 +1000,11 @@ Relancer le trigger plusieurs fois enrichit les lots suivants de 20 jusqu'à ce 
 
 #### Tolérance aux pannes
 
-Chaque enrichissement est isolé dans un `try/catch` : si la page détail échoue (404, timeout, ou **HTTP 403 anti-bot côté Indeed**), l'offre est tout de même marquée `enriched = true` pour ne pas boucler indéfiniment sur une URL cassée.
+Chaque enrichissement est isolé dans un `try/catch` : si la page détail échoue (404, timeout, **HTTP 403 anti-bot côté Indeed** ou **HTTP 999 côté LinkedIn**), l'offre est tout de même marquée `enriched = true` pour ne pas boucler indéfiniment sur une URL cassée.
 
 Pour **indeed.ma**, le 403 est intermittent (rate-limiting selon l'IP sortante). En cas d'échec, l'offre **conserve la description courte issue du `snippet`** récupéré à la collecte — le détail complet reste un *bonus* : si l'IP du serveur n'est pas bloquée (ex : en production), `div#jobDescriptionText` fournit la description complète ; sinon le snippet sert de repli, et l'UI reste fonctionnelle.
+
+Pour **linkedin.com**, le 999 est évité en amont par le `LINKEDIN_USER_AGENT` dédié (voir §4.10 ci-dessus) ; en cas d'échec malgré tout, l'offre garde les champs déjà connus depuis la collecte (`title`, `company`, `location`, `logoUrl`, `postedAt`) et reste affichable, simplement sans description longue ni `experienceLevel`/`contractType`/`sector`.
 
 #### Rendu côté Angular
 
