@@ -36,6 +36,16 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── FlareSolverr (Cloudflare JS-challenge bypass for scrapers) ───────────
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: hiresync-flaresolverr
+    environment:
+      LOG_LEVEL: warn
+    ports:
+      - "8191:8191"
+    restart: on-failure
+
   # ── Spring Boot Backend ───────────────────────────────────────────────────
   backend:
     build: .
@@ -55,6 +65,7 @@ services:
       JWT_SECRET:         ${JWT_SECRET}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL:   ${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}
+      FLARESOLVERR_URL:   http://hiresync-flaresolverr:8191
     volumes:
       - cv_uploads:/app/uploads/cvs
       - playwright_cache:/root/.cache/ms-playwright   # persists Chromium download across restarts
@@ -63,6 +74,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      flaresolverr:
+        condition: service_started
     restart: on-failure
 
 volumes:

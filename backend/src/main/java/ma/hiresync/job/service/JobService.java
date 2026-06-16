@@ -28,12 +28,13 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JobService {
 
-    private final JobRepository          jobRepository;
-    private final JobScraperService      rekruteScraper;
-    private final EmploiMaScraperService emploiMaScraper;
-    private final IndeedScraperService   indeedScraper;
-    private final LinkedInScraperService linkedInScraper;
-    private final JobEnrichmentService   enricher;
+    private final JobRepository             jobRepository;
+    private final JobScraperService         rekruteScraper;
+    private final EmploiMaScraperService    emploiMaScraper;
+    private final IndeedScraperService      indeedScraper;
+    private final LinkedInScraperService    linkedInScraper;
+    private final MarocEmploiScraperService marocEmploiScraper;
+    private final JobEnrichmentService      enricher;
 
     /** Paginated, filtered job search. Empty criteria returns everything. */
     public Page<JobResponse> search(JobSearchCriteria criteria, Pageable pageable) {
@@ -87,7 +88,8 @@ public class JobService {
 
     /** Runs all scrapers synchronously and reports how many new jobs were saved. */
     public ScrapeTriggerResponse triggerScrape() {
-        int saved = rekruteScraper.scrape() + emploiMaScraper.scrape() + indeedScraper.scrape() + linkedInScraper.scrape();
+        int saved = rekruteScraper.scrape() + emploiMaScraper.scrape() + indeedScraper.scrape()
+                  + linkedInScraper.scrape() + marocEmploiScraper.scrape();
         long total = jobRepository.count();
         return new ScrapeTriggerResponse(saved, total);
     }
