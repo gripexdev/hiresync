@@ -13,7 +13,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { debounceTime, distinctUntilChanged } from 'rxjs';
 import { JobService } from '../../../core/services/job.service';
 import { AuthService } from '../../../core/auth/auth.service';
-import { Job, ContractType, ExperienceLevel } from '../../../core/models/job.model';
+import { Job, JobFacets } from '../../../core/models/job.model';
 
 @Component({
   selector: 'app-job-search',
@@ -40,11 +40,10 @@ export class JobSearchComponent implements OnInit {
   scraping  = signal(false);
   enriching = signal(false);
 
-  readonly PAGE_SIZE = 10;
+  // Filter options with live counts, loaded from the backend (derived from real data)
+  facets = signal<JobFacets | null>(null);
 
-  readonly contractTypes: ContractType[]      = ['CDI', 'CDD', 'Stage', 'Freelance', 'Alternance'];
-  readonly experienceLevels: ExperienceLevel[] = ['Junior', 'Mid', 'Senior', 'Manager', 'Director'];
-  readonly sectors = ['Télécommunications', 'Finance & Banque', 'Industrie / Mining', 'FinTech', 'Transport / Aviation', 'IT / Conseil'];
+  readonly PAGE_SIZE = 10;
 
   readonly rangeStart = computed(() => this.currentPage() * this.PAGE_SIZE + 1);
   readonly rangeEnd   = computed(() => this.currentPage() * this.PAGE_SIZE + this.jobs().length);
@@ -69,13 +68,14 @@ export class JobSearchComponent implements OnInit {
 
   filters = this.fb.group({
     q:               [''],
-    location:        [''],
-    contractType:    [null],
-    sector:          [null],
-    experienceLevel: [null],
+    city:            [null as string | null],
+    contractType:    [null as string | null],
+    experienceLevel: [null as string | null],
+    sector:          [null as string | null],
   });
 
   ngOnInit(): void {
+    this.svc.getFacets().subscribe(f => this.facets.set(f));
     this._search();
     this.filters.valueChanges.pipe(debounceTime(400), distinctUntilChanged()).subscribe(() => {
       this.currentPage.set(0);

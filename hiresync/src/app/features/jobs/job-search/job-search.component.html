@@ -41,16 +41,30 @@
 
       <mat-form-field appearance="outline">
         <mat-label>Ville</mat-label>
-        <mat-icon matPrefix>location_on</mat-icon>
-        <input matInput formControlName="location" placeholder="Casablanca, Rabat…" />
+        <mat-select formControlName="city">
+          <mat-option [value]="null">Toutes les villes</mat-option>
+          @for (o of facets()?.cities ?? []; track o.key) {
+            <mat-option [value]="o.key">{{ o.label }} ({{ o.count }})</mat-option>
+          }
+        </mat-select>
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>Type de contrat</mat-label>
         <mat-select formControlName="contractType">
           <mat-option [value]="null">Tous</mat-option>
-          @for (t of contractTypes; track t) {
-            <mat-option [value]="t">{{ t }}</mat-option>
+          @for (o of facets()?.contractTypes ?? []; track o.key) {
+            <mat-option [value]="o.key">{{ o.label }} ({{ o.count }})</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Niveau d'expérience</mat-label>
+        <mat-select formControlName="experienceLevel">
+          <mat-option [value]="null">Toutes</mat-option>
+          @for (o of facets()?.experienceLevels ?? []; track o.key) {
+            <mat-option [value]="o.key">{{ o.label }} ({{ o.count }})</mat-option>
           }
         </mat-select>
       </mat-form-field>
@@ -59,18 +73,8 @@
         <mat-label>Secteur</mat-label>
         <mat-select formControlName="sector">
           <mat-option [value]="null">Tous</mat-option>
-          @for (s of sectors; track s) {
-            <mat-option [value]="s">{{ s }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-
-      <mat-form-field appearance="outline">
-        <mat-label>Niveau d'expérience</mat-label>
-        <mat-select formControlName="experienceLevel">
-          <mat-option [value]="null">Tous</mat-option>
-          @for (lvl of experienceLevels; track lvl) {
-            <mat-option [value]="lvl">{{ lvl }}</mat-option>
+          @for (o of facets()?.sectors ?? []; track o.key) {
+            <mat-option [value]="o.key">{{ o.label }} ({{ o.count }})</mat-option>
           }
         </mat-select>
       </mat-form-field>

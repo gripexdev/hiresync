@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
-import { EnrichResult, Job, JobSearchParams, JobSearchResult, ScrapeResult } from '../models/job.model';
+import { EnrichResult, Job, JobFacets, JobSearchParams, JobSearchResult, ScrapeResult } from '../models/job.model';
 
 interface SpringPage<T> {
   content: T[];
@@ -23,7 +23,11 @@ export class JobService {
     let p = new HttpParams()
       .set('page', String(params.page ?? 0))
       .set('size', String(params.size ?? 20));
-    if (params.q) p = p.set('q', params.q);
+    if (params.q)               p = p.set('q', params.q);
+    if (params.city)            p = p.set('city', params.city);
+    if (params.contractType)    p = p.set('contractType', params.contractType);
+    if (params.experienceLevel) p = p.set('experienceLevel', params.experienceLevel);
+    if (params.sector)          p = p.set('sector', params.sector);
 
     return this.http.get<SpringPage<Job>>(this.apiUrl, { params: p }).pipe(
       map(page => ({
@@ -34,6 +38,11 @@ export class JobService {
         size: page.size,
       }))
     );
+  }
+
+  /** GET /api/jobs/facets — filter options with live counts, derived from the data */
+  getFacets(): Observable<JobFacets> {
+    return this.http.get<JobFacets>(`${this.apiUrl}/facets`);
   }
 
   getById(id: string): Observable<Job> {
