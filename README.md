@@ -25,6 +25,7 @@
      - [4.9.3 Source B — emploi.ma (HTML classique)](#493-source-b--emploima-html-classique)
      - [4.9.4 Source C — Indeed Maroc (JSON embarqué)](#494-source-c--indeed-maroc-json-embarqué)
      - [4.9.5 Source D — LinkedIn (recherche invité)](#495-source-d--linkedin-recherche-invité)
+     - [4.9.6 Source E — marocemploi.net (WordPress / FlareSolverr)](#496-source-e--marocemploinet-wordpress--flaresolverr)
    - [4.10 Enrichissement des descriptions (source-aware)](#410-enrichissement-des-descriptions-source-aware)
    - [4.11 Pagination côté serveur](#411-pagination-côté-serveur)
 5. [Lancer le projet](#5-lancer-le-projet)
@@ -62,8 +63,8 @@ HireSync est une plateforme web qui aide les candidats marocains à :
 | IA / LLM | **OpenRouter API** → `google/gemma-4-31b-it:free` | Optimisation du CV par l'IA |
 | PDF parsing | **Apache PDFBox 3.0** | Extraction du texte depuis les CVs PDF |
 | HTTP Client | **Spring WebFlux WebClient** | Appels HTTP vers OpenRouter |
-| Scraping HTML | **Jsoup 1.17** | Connexion HTTP + parsing DOM des job boards (rekrute, emploi.ma, indeed) |
-| Parsing JSON | **Jackson `ObjectMapper`** | Décodage du JSON embarqué dans les pages Indeed |
+| Scraping HTML | **Jsoup 1.17** | Connexion HTTP + parsing DOM des job boards (rekrute, emploi.ma, indeed, marocemploi) |
+| Parsing JSON | **Jackson `ObjectMapper`** | Décodage du JSON embarqué dans les pages Indeed et des réponses FlareSolverr |
 
 ### Frontend (`/hiresync`)
 | Couche | Technologie | Rôle |
@@ -80,6 +81,7 @@ HireSync est une plateforme web qui aide les candidats marocains à :
 |---------|-------------|------|
 | PostgreSQL | `postgres:16-alpine` | 5432 |
 | RabbitMQ | `rabbitmq:3.13-management-alpine` | 5672 (AMQP), 15672 (UI admin) |
+| FlareSolverr | `ghcr.io/flaresolverr/flaresolverr:latest` | 8191 (API interne uniquement) |
 
 ---
 
@@ -99,7 +101,7 @@ HireSync/
 │   │   │   └── dto/            ← Objets de transfert (request/response)
 │   │   ├── job/                ← Offres d'emploi (scraping multi-sources + enrichissement)
 │   │   │   ├── controller/     ← JobController (recherche, détail, triggers admin)
-│   │   │   ├── service/        ← JobService + 3 scrapers + JobEnrichmentService
+│   │   │   ├── service/        ← JobService + 5 scrapers + JobEnrichmentService
 │   │   │   ├── entity/         ← Job (+ @ElementCollection requirements)
 │   │   │   ├── repository/     ← JobRepository (recherche paginée, dédup)
 │   │   │   └── dto/            ← JobResponse, Scrape/EnrichTriggerResponse
@@ -453,7 +455,7 @@ Tous les appels HTTP Angular ont automatiquement le header `Authorization: Beare
 
 #### 4.9.1 Vue d'ensemble & orchestration
 
-HireSync agrège automatiquement les offres d'emploi de **quatre job boards marocains** (dont LinkedIn) et les stocke dans une **table `jobs` unifiée** en PostgreSQL. Chaque source a son propre service de scraping, mais tous partagent la **même entité `Job`**, la **même clé de déduplication** (`sourceUrl` unique) et le **même pipeline en deux passes** : une passe rapide de **collecte** (listing) puis une passe d'**enrichissement** (page détail).
+HireSync agrège automatiquement les offres d'emploi de **cinq job boards marocains** (dont LinkedIn) et les stocke dans une **table `jobs` unifiée** en PostgreSQL. Chaque source a son propre service de scraping, mais tous partagent la **même entité `Job`**, la **même clé de déduplication** (`sourceUrl` unique) et le **même pipeline** : collecte du listing, puis enrichissement (page détail) — sauf marocemploi.net qui fait les deux en une seule passe.
 
 | Source | Service | Champ `source` | Technique de collecte | Pourquoi cette technique |
 |--------|---------|----------------|-----------------------|--------------------------|
@@ -461,50 +463,57 @@ HireSync agrège automatiquement les offres d'emploi de **quatre job boards maro
 | **emploi.ma** | `EmploiMaScraperService` | `"emploi.ma"` | Jsoup → parsing du DOM HTML (`<div class="card-job">`) | Idem — listing server-side, structure en cartes |
 | **Indeed Maroc** | `IndeedScraperService` | `"indeed.ma"` | Jsoup (fetch) + Jackson → **JSON embarqué** dans un `<script>` | Indeed ne rend **pas** les offres en HTML ; elles sont injectées en JSON dans `window.mosaic` |
 | **LinkedIn** | `LinkedInScraperService` | `"linkedin.com"` | Jsoup → parsing du DOM HTML (`<div class="base-search-card">`), endpoint "guest" public | Pas de login requis ; le endpoint de recherche invité rend les cartes en HTML pur |
+| **marocemploi.net** | `MarocEmploiScraperService` | `"marocemploi.net"` | **FlareSolverr** → Jsoup parsing DOM (`<div class="jobsearch-list-option">`) + page détail inline | Le site est protégé par Cloudflare JS challenge — requiert un vrai navigateur pour passer le contrôle TLS (voir §4.9.6) |
 
 **Orchestration — `JobService.triggerScrape()` :**
 
-Les quatre scrapers sont appelés séquentiellement et leurs compteurs additionnés. Le contrôleur ne parle qu'à `JobService` :
+Les cinq scrapers sont appelés séquentiellement et leurs compteurs additionnés. Le contrôleur ne parle qu'à `JobService` :
 
 ```java
 // JobService.java
 public ScrapeTriggerResponse triggerScrape() {
-    int saved = rekruteScraper.scrape()      // rekrute.com
-              + emploiMaScraper.scrape()      // emploi.ma
-              + indeedScraper.scrape()        // indeed.ma
-              + linkedInScraper.scrape();     // linkedin.com
+    int saved = rekruteScraper.scrape()           // rekrute.com
+              + emploiMaScraper.scrape()           // emploi.ma
+              + indeedScraper.scrape()             // indeed.ma
+              + linkedInScraper.scrape()           // linkedin.com
+              + marocEmploiScraper.scrape();       // marocemploi.net
     long total = jobRepository.count();
     return new ScrapeTriggerResponse(saved, total);
 }
 ```
 
-Un seul appel à `POST /api/admin/scrape/trigger` collecte donc les offres des **quatre sources** d'un coup. La déduplication par `sourceUrl` rend l'opération **idempotente** quelle que soit la source.
+Un seul appel à `POST /api/admin/scrape/trigger` collecte donc les offres des **cinq sources** d'un coup. La déduplication par `sourceUrl` rend l'opération **idempotente** quelle que soit la source.
 
-**Choix de conception communs (les 4 scrapers) :**
+**Choix de conception communs (les 5 scrapers) :**
 
 - **Jsoup** comme client HTTP + parseur — une seule dépendance pour `connect().get()` *et* le parsing DOM, plus léger qu'un navigateur headless.
-- **Pas de navigateur headless (Playwright)** pour le scraping — il n'est utilisé que pour le rendu PDF du CV Studio (§4.7). Les quatre sources sont accessibles en HTTP simple, donc inutile de payer le coût d'un Chromium.
-- **User-Agent honnête** : `Mozilla/5.0 (compatible; HireSync-Bot/1.0; +https://hiresync.ma)` — identifie le bot plutôt que d'usurper un vrai navigateur (sauf LinkedIn, voir §4.9.5 et §4.10 pour le cas particulier).
+- **FlareSolverr** uniquement pour marocemploi.net — les quatre autres sources sont accessibles en HTTP simple. Chromium n'est utilisé que là où Cloudflare l'exige.
+- **User-Agent honnête** : `Mozilla/5.0 (compatible; HireSync-Bot/1.0; +https://hiresync.ma)` — identifie le bot plutôt que d'usurper un vrai navigateur (sauf LinkedIn et marocemploi.net, voir §4.9.5, §4.9.6 et §4.10).
 - **`timeout(15_000)`** + `try/catch IOException` par page → un échec réseau interrompt proprement la source sans planter les autres.
 - **Déduplication avant insertion** : `if (jobRepository.existsBySourceUrl(sourceUrl)) continue;`
-- **`MAX_PAGES = 3`** (rekrute, emploi.ma & LinkedIn) — constante en tête de service, facile à augmenter.
+- **`MAX_PAGES = 3`** (rekrute, emploi.ma, LinkedIn & marocemploi.net) — constante en tête de chaque service, facile à augmenter.
 
 ```
-4 sources              Spring Boot                 PostgreSQL
-    │                       │                           │
-    │  [Passe 1 — Collecte] │                           │
-    │◄── rekrute  (3 pages) │                           │
-    │◄── emploi.ma (3 pages)│                           │
-    │◄── indeed   (1 page)  │                           │
-    │◄── linkedin (3 pages) │                           │
-    │                       ├─ INSERT INTO jobs ────────►│
-    │                       │   (si sourceUrl inconnu)  │
-    │                       │                           │
-    │  [Passe 2 — Enrichissement, source-aware]         │
-    │◄── GET page détail    │                           │
-    │  (1 requête / offre)  ├─ UPDATE jobs SET ─────────►│
-    │                       │   description, requirements│
-    │                       │   enriched = true         │
+5 sources                  Spring Boot                   PostgreSQL
+    │                           │                             │
+    │  [Passe 1 — Collecte]     │                             │
+    │◄── rekrute  (3 pages)     │                             │
+    │◄── emploi.ma (3 pages)    │                             │
+    │◄── indeed   (1 page)      │                             │
+    │◄── linkedin (3 pages)     │                             │
+    │◄── marocemploi (3 pages)  │                             │
+    │    via FlareSolverr       ├─ INSERT INTO jobs ──────────►│
+    │                           │   (si sourceUrl inconnu)    │
+    │                           │                             │
+    │  [Passe 2 — Enrichissement, source-aware]               │
+    │  (rekrute, emploi.ma, indeed, linkedin)                 │
+    │◄── GET page détail        │                             │
+    │  (1 requête / offre)      ├─ UPDATE jobs SET ───────────►│
+    │                           │   description, requirements  │
+    │                           │   enriched = true            │
+    │                           │                             │
+    │  marocemploi.net : description + contractType déjà      │
+    │  collectés en passe 1 (enriched=true dès l'insertion)   │
 ```
 
 ---
@@ -565,7 +574,7 @@ if (src.contains("confidentiel")) {
 
 ---
 
-#### Schéma de stockage (commun aux 4 sources)
+#### Schéma de stockage (commun aux 5 sources)
 
 Table **`jobs`** (PostgreSQL, gérée par Hibernate avec `ddl-auto: update`) — une seule table pour les quatre job boards, distingués par la colonne `source` :
 
@@ -581,7 +590,7 @@ Table **`jobs`** (PostgreSQL, gérée par Hibernate avec `ddl-auto: update`) —
 | `description` | TEXT | Texte court (collecte) → texte complet (après enrichissement) |
 | `logo_url` | VARCHAR(512) | URL du logo entreprise |
 | `source_url` | VARCHAR(1024) | URL de l'offre — **UNIQUE** (clé de dédup) |
-| `source` | VARCHAR | `"rekrute.com"`, `"emploi.ma"`, `"indeed.ma"` ou `"linkedin.com"` |
+| `source` | VARCHAR | `"rekrute.com"`, `"emploi.ma"`, `"indeed.ma"`, `"linkedin.com"` ou `"marocemploi.net"` |
 | `posted_at` | TIMESTAMP | Date de publication originale |
 | `scraped_at` | TIMESTAMP | Date d'insertion en base |
 | `enriched` | BOOLEAN | `false` → description courte, `true` → description complète |
@@ -782,17 +791,213 @@ Comme pour les autres sources, chaque champ est extrait via un helper qui renvoi
 
 ---
 
+#### 4.9.6 Source E — marocemploi.net (WordPress / FlareSolverr)
+
+`MarocEmploiScraperService` — `SOURCE = "marocemploi.net"`, `BASE_URL = "https://www.marocemploi.net"`.
+
+##### Structure du site
+
+marocemploi.net est un site WordPress propulsé par le plugin **WP-JobSearch**. Les offres sont rendues côté serveur en HTML pur — pas de JavaScript nécessaire pour afficher les cartes. La difficulté vient de la **protection Cloudflare** et non du DOM en lui-même.
+
+##### Pagination — deux patterns d'URL
+
+```
+Page 1 → https://www.marocemploi.net/offre/
+Page N → https://www.marocemploi.net/offre/?ajax_filter=true&job_page=N
+```
+
+La première page utilise l'URL racine de la section `/offre/`. Les pages suivantes utilisent un paramètre AJAX (`ajax_filter=true&job_page=N`) mais renvoient quand même du **HTML complet** (et non du JSON) — Jsoup peut donc le parser directement, quel que soit le numéro de page.
+
+`MAX_PAGES = 3` → environ **90 nouvelles offres** par déclenchement.
+
+##### Structure DOM — page listing
+
+Chaque offre apparaît dans un wrapper `.jobsearch-joblisting-classic-wrap` qui contient une `<figure>` (logo) et un bloc `.jobsearch-list-option` (tous les champs textuels) :
+
+| Champ | Sélecteur Jsoup | Remarque |
+|-------|----------------|----------|
+| `sourceUrl` | `h2.jobsearch-pst-title a[href]` | **clé de déduplication** |
+| `title` | `h2.jobsearch-pst-title a` (texte) | Parfois suivi de " — Casablanca" — conservé tel quel |
+| `company` | `li.job-company-name a` (texte, `@` retiré) | `null` si absent |
+| `logoUrl` | `figure img[src]` — filtré si placeholder | Voir filtres ci-dessous |
+| `location` | Premier `<li>` sans classe contenant un chiffre ou une virgule | Tronqué avant la première virgule |
+| `sector` | Dernier `<li>` sans classe qui ne ressemble pas à une localisation | Source card — raffiné par la page détail |
+
+##### Filtres logo — images placeholder
+
+WP-JobSearch insère une image générique quand l'entreprise n'a pas de logo. Le scraper les ignore si l'URL contient l'un des marqueurs suivants :
+
+```java
+private static final List<String> PLACEHOLDER_PATTERNS =
+        List.of("pasdimage", "profile-img-10", "default-logo", "no-logo");
+```
+
+Dans ce cas `logoUrl` reste `null`, et le DTO (`JobResponse.from()`) applique automatiquement le favicon Google comme repli (voir §4.9.1 — fallback logo).
+
+##### Problème Cloudflare — protection JA3
+
+Lors du déploiement en Docker, toutes les requêtes Jsoup vers marocemploi.net recevaient **HTTP 403** avec les headers :
+
+```
+cf-mitigated: challenge
+server: cloudflare
+```
+
+L'analyse a montré que la **même IP publique** (196.119.198.10) obtenait 200 depuis Windows (Schannel) et 403 depuis Docker (Linux OpenSSL) — preuve que le blocage est basé sur l'empreinte TLS **JA3**, pas sur l'IP :
+
+| Contexte | JA3 fingerprint | Réponse CF |
+|----------|----------------|------------|
+| Windows (Schannel) | `2800f914a7a4ba98aa9df62d316a460c` | ✅ 200 OK |
+| Docker (Linux OpenSSL) | `4ea056e63b7910cbf543f0c095064dfe` | ❌ 403 challenge |
+
+L'ajout de headers Chrome (`sec-ch-ua`, `sec-fetch-*`, etc.) à Jsoup ne changeait rien — Cloudflare analyse la **couche TLS**, pas les en-têtes HTTP.
+
+##### Solution — FlareSolverr (sidecar Docker)
+
+[FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) est un conteneur Docker qui expose un vrai **navigateur headless Chromium** via une API REST simple. Son empreinte JA3 passe Cloudflare là où OpenSSL échoue.
+
+Il est déclaré comme service dans `docker-compose.yml` :
+
+```yaml
+flaresolverr:
+  image: ghcr.io/flaresolverr/flaresolverr:latest
+  container_name: hiresync-flaresolverr
+  environment:
+    LOG_LEVEL: warn
+  ports:
+    - "8191:8191"
+  restart: on-failure
+```
+
+Et le backend reçoit son URL via une variable d'environnement :
+
+```yaml
+# docker-compose.yml — service backend
+environment:
+  FLARESOLVERR_URL: http://hiresync-flaresolverr:8191
+depends_on:
+  flaresolverr:
+    condition: service_started
+```
+
+##### Intégration Spring Boot — `@Value` + méthode `fetch()`
+
+```java
+@Value("${FLARESOLVERR_URL:}")   // vide si non défini (mode local)
+private String flareSolverrUrl;
+```
+
+La méthode `fetch(url)` route la requête selon le contexte :
+
+```java
+private Document fetch(String url) throws IOException {
+    if (flareSolverrUrl != null && !flareSolverrUrl.isBlank()) {
+        return fetchViaFlareSolverr(url);     // Docker → via FlareSolverr
+    }
+    return Jsoup.connect(url)                  // local → Jsoup direct (Windows Schannel)
+            .userAgent(USER_AGENT)
+            /* en-têtes Chrome complets */
+            .get();
+}
+```
+
+L'appel FlareSolverr est un simple `POST` JSON :
+
+```java
+private Document fetchViaFlareSolverr(String targetUrl) throws IOException {
+    String apiUrl = flareSolverrUrl + "/v1";
+    String body = String.format(
+            "{\"cmd\":\"request.get\",\"url\":\"%s\",\"maxTimeout\":60000}", targetUrl);
+
+    HttpURLConnection conn = (HttpURLConnection) new URL(apiUrl).openConnection();
+    conn.setRequestMethod("POST");
+    conn.setRequestProperty("Content-Type", "application/json");
+    conn.setDoOutput(true);
+    conn.setConnectTimeout(10_000);
+    conn.setReadTimeout(70_000);
+    // ... écriture du body, lecture de la réponse
+
+    JsonNode root = objectMapper.readTree(conn.getInputStream());
+    String html = root.path("solution").path("response").asText("");
+    String resolvedUrl = root.path("solution").path("url").asText(targetUrl);
+    return Jsoup.parse(html, resolvedUrl);
+}
+```
+
+FlareSolverr renvoie `{"status":"ok","solution":{"response":"<html>...","url":"..."}}`. Le HTML extrait est parsé par Jsoup exactement comme pour les autres sources.
+
+##### Enrichissement inline — page détail
+
+Contrairement aux quatre autres sources qui sauvegardent d'abord les offres en stub et attendent la passe d'enrichissement (§4.10), `MarocEmploiScraperService` **récupère la page de détail pendant le scraping lui-même** :
+
+```java
+// parseCard() — après avoir extrait titre + URL depuis la carte listing
+try {
+    Document detail = fetch(sourceUrl);   // FlareSolverr si Docker
+
+    // Type de contrat : .jobsearch-jobdetail-type → "CDI", "CDD", "Stage"
+    Element typeEl = detail.selectFirst(".jobsearch-jobdetail-type");
+
+    // Secteur depuis la détail (plus fiable que depuis la carte)
+    Element sectorEl = detail.selectFirst(".post-in-category");
+
+    // Description complète : .jobsearch-description
+    Element descEl = detail.selectFirst(".jobsearch-description");
+
+    // Date de publication : "Date de Parution : 1 juin 2026"
+    for (Element li : detail.select("li")) {
+        if (li.text().contains("Date de Parution")) {
+            postedAt = parseFrenchDate(li.text());
+            break;
+        }
+    }
+} catch (IOException e) {
+    log.warn("Could not fetch detail page {}: {}", sourceUrl, e.getMessage());
+}
+
+return Job.builder()
+        /* ... */
+        .enriched(description != null)   // true dès l'insertion si détail obtenu
+        .build();
+```
+
+L'offre est insérée avec `enriched = true` si la page de détail a pu être lue — elle **n'apparaît jamais dans la file d'enrichissement** de `JobEnrichmentService`. Si la page détail échoue (rate-limit passager), l'offre est quand même sauvegardée avec les champs de la carte et `enriched = false` — elle sera reprise lors d'une prochaine passe d'enrichissement.
+
+##### Parsing de la date — français avec accents
+
+La date est affichée en français sur la page de détail : `"Date de Parution : 1 juin 2026"`. Elle est extraite par regex et convertie via un dictionnaire de mois :
+
+```java
+private static final Map<String, Integer> FR_MONTHS = Map.ofEntries(
+        Map.entry("janvier", 1), Map.entry("février", 2), Map.entry("fevrier", 2),
+        Map.entry("mars", 3),    Map.entry("avril", 4),   Map.entry("mai", 5),
+        Map.entry("juin", 6),    Map.entry("juillet", 7), Map.entry("août", 8),
+        Map.entry("aout", 8),    Map.entry("septembre", 9), Map.entry("octobre", 10),
+        Map.entry("novembre", 11), Map.entry("décembre", 12), Map.entry("decembre", 12)
+);
+private static final Pattern DATE_PATTERN =
+        Pattern.compile("(\\d{1,2})\\s+(\\p{L}+)\\s+(\\d{4})");
+
+// "1 juin 2026" → LocalDateTime(2026, 6, 1, 0, 0)
+```
+
+Les variantes avec et sans accent (`février`/`fevrier`, `août`/`aout`) sont toutes couvertes — utile quand l'encodage de la page produit des caractères non-accentués.
+
+---
+
 ### 4.10 Enrichissement des descriptions (source-aware)
 
 #### Pourquoi une deuxième passe ?
 
-Sur les trois sources, la page de liste ne contient qu'un **court résumé** de l'offre. La description complète (missions détaillées, profil recherché, formation requise) se trouve **uniquement sur la page de détail** de chaque offre.
+Sur quatre des cinq sources, la page de liste ne contient qu'un **court résumé** de l'offre. La description complète (missions détaillées, profil recherché, formation requise) se trouve **uniquement sur la page de détail** de chaque offre.
 
-Effectuer une requête détail par offre lors du scraping initial ralentirait excessivement l'opération. L'enrichissement est donc une **étape séparée**, déclenchée manuellement via le bouton "Enrichir descriptions" dans l'interface (`POST /api/admin/enrich/trigger`).
+> **Exception — marocemploi.net :** `MarocEmploiScraperService` récupère la page de détail **inline, pendant la passe de collecte** (voir §4.9.6). Les offres marocemploi.net arrivent en base avec `enriched = true` et ne passent jamais par `JobEnrichmentService`.
+
+Effectuer une requête détail par offre lors du scraping initial ralentirait excessivement l'opération pour ces sources. L'enrichissement est donc une **étape séparée**, déclenchée manuellement via le bouton "Enrichir descriptions" dans l'interface (`POST /api/admin/enrich/trigger`).
 
 #### Aiguillage par source (`enrichOne`)
 
-Un seul service, `JobEnrichmentService`, enrichit les quatre sources. Comme chaque job board a une structure HTML de détail différente, l'extraction est **aiguillée selon `job.getSource()`** :
+Un seul service, `JobEnrichmentService`, enrichit les quatre sources gérées ici (rekrute, emploi.ma, Indeed, LinkedIn). marocemploi.net est auto-enrichi à la collecte et n'arrive jamais ici. Comme chaque job board a une structure HTML de détail différente, l'extraction est **aiguillée selon `job.getSource()`** :
 
 ```java
 // JobEnrichmentService.enrichOne()
@@ -1216,7 +1421,7 @@ curl -H "Authorization: Bearer <token>" http://localhost:8080/api/cv/versions
 ### Admin (authentification requise)
 | Méthode | URL | Description |
 |---------|-----|-------------|
-| POST | `/api/admin/scrape/trigger` | Lance le scraping des **3 sources** (rekrute.com 3 pages + emploi.ma 3 pages + Indeed 1 page). Retourne `{newJobsSaved, totalJobsInDb}` |
+| POST | `/api/admin/scrape/trigger` | Lance le scraping des **5 sources** (rekrute.com 3 pages + emploi.ma 3 pages + Indeed 1 page + LinkedIn 3 pages + marocemploi.net 3 pages via FlareSolverr). Retourne `{newJobsSaved, totalJobsInDb}` |
 | POST | `/api/admin/enrich/trigger` | Enrichit les 20 prochaines offres non-enrichies (visite page détail, extraction aiguillée par source). Retourne `{enrichedThisRun, totalEnriched, enrichedLeft}` |
 
 ### WebSocket
@@ -1288,10 +1493,12 @@ backend/src/main/java/ma/hiresync/
 │   ├── controller/JobController.java        GET /api/jobs, GET /api/jobs/{id}, POST /admin/scrape+enrich
 │   ├── dto/                                 JobResponse, ScrapeTriggerResponse, EnrichTriggerResponse
 │   └── service/
-│       ├── JobService.java                  Orchestrateur — triggerScrape() additionne les 3 scrapers, mapping DTO
+│       ├── JobService.java                  Orchestrateur — triggerScrape() additionne les 5 scrapers, mapping DTO
 │       ├── JobScraperService.java           Jsoup → rekrute.com listing (3 pages × ~10 offres)
 │       ├── EmploiMaScraperService.java      Jsoup → emploi.ma listing (cartes card-job, 3 pages)
 │       ├── IndeedScraperService.java        Jsoup + Jackson → Indeed JSON embarqué (window.mosaic, 1 page)
+│       ├── LinkedInScraperService.java      Jsoup → LinkedIn guest endpoint (3 pages × 10 offres)
+│       ├── MarocEmploiScraperService.java   FlareSolverr + Jsoup → marocemploi.net (3 pages, enrichissement inline)
 │       └── JobEnrichmentService.java        Pages détail, extraction aiguillée par source (description + requirements)
 │
 ├── notification/
