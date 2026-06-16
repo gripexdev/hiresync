@@ -54,9 +54,9 @@ export interface JobSearchResult {
   size: number;
 }
 
-/** Response of POST /api/admin/scrape/trigger */
+/** Response of POST /api/admin/scrape/trigger (async — sources queued to RabbitMQ) */
 export interface ScrapeResult {
-  newJobsSaved: number;
+  sourcesQueued: number;
   totalJobsInDb: number;
 }
 

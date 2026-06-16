@@ -111,9 +111,10 @@ export class JobSearchComponent implements OnInit {
     this.svc.triggerScrape().subscribe({
       next: r => {
         this.scraping.set(false);
-        this.snack.open(`✅ ${r.newJobsSaved} nouvelles offres scraped (total: ${r.totalJobsInDb})`, 'OK', { duration: 4000 });
-        this.currentPage.set(0);
-        this._search();
+        this.snack.open(
+          `🚀 ${r.sourcesQueued} sources en cours de scraping — les offres apparaîtront dans quelques minutes`,
+          'OK', { duration: 6000 }
+        );
       },
       error: () => {
         this.scraping.set(false);

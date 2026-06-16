@@ -8,6 +8,7 @@ import ma.hiresync.job.dto.ScrapeTriggerResponse;
 import ma.hiresync.job.filter.JobFilterCatalog;
 import ma.hiresync.job.filter.JobSearchCriteria;
 import ma.hiresync.job.filter.JobSpecifications;
+import ma.hiresync.job.messaging.ScrapeProducer;
 import ma.hiresync.job.repository.JobRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,13 +29,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JobService {
 
-    private final JobRepository             jobRepository;
-    private final JobScraperService         rekruteScraper;
-    private final EmploiMaScraperService    emploiMaScraper;
-    private final IndeedScraperService      indeedScraper;
-    private final LinkedInScraperService    linkedInScraper;
-    private final MarocEmploiScraperService marocEmploiScraper;
-    private final JobEnrichmentService      enricher;
+    private final JobRepository    jobRepository;
+    private final ScrapeProducer   scrapeProducer;
+    private final JobEnrichmentService enricher;
 
     /** Paginated, filtered job search. Empty criteria returns everything. */
     public Page<JobResponse> search(JobSearchCriteria criteria, Pageable pageable) {
@@ -86,12 +83,10 @@ public class JobService {
         return facets;
     }
 
-    /** Runs all scrapers synchronously and reports how many new jobs were saved. */
+    /** Queues one scrape message per source — all 5 run in parallel via RabbitMQ. */
     public ScrapeTriggerResponse triggerScrape() {
-        int saved = rekruteScraper.scrape() + emploiMaScraper.scrape() + indeedScraper.scrape()
-                  + linkedInScraper.scrape() + marocEmploiScraper.scrape();
-        long total = jobRepository.count();
-        return new ScrapeTriggerResponse(saved, total);
+        scrapeProducer.publishAll();
+        return new ScrapeTriggerResponse(scrapeProducer.sourceCount(), jobRepository.count());
     }
 
     /** Enriches up to 20 unenriched jobs and reports progress. */

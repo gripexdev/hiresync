@@ -51,10 +51,10 @@ public class JobController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    /** POST /api/admin/scrape/trigger — runs scraper synchronously */
+    /** POST /api/admin/scrape/trigger — queues all 5 sources to RabbitMQ, returns immediately */
     @PostMapping("/admin/scrape/trigger")
     public ResponseEntity<ScrapeTriggerResponse> trigger() {
-        return ResponseEntity.ok(jobService.triggerScrape());
+        return ResponseEntity.accepted().body(jobService.triggerScrape());
     }
 
     /**
