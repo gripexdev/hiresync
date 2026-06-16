@@ -27,6 +27,7 @@ public record JobResponse(
         LocalDateTime scrapedAt
 ) {
     public static JobResponse from(Job job) {
+        String logo = job.getLogoUrl() != null ? job.getLogoUrl() : sourceFallbackLogo(job.getSource());
         return new JobResponse(
                 job.getId(),
                 job.getTitle(),
@@ -37,11 +38,18 @@ public record JobResponse(
                 job.getExperienceLevel(),
                 job.getDescription(),
                 job.getRequirements(),
-                job.getLogoUrl(),
+                logo,
                 job.getSourceUrl(),
                 job.getSource(),
                 job.getPostedAt(),
                 job.getScrapedAt()
         );
+    }
+
+    private static String sourceFallbackLogo(String source) {
+        if (source == null) return null;
+        // Strip subdomain to get the root domain for the favicon lookup
+        String domain = source.replaceFirst("^(?:www\\.)?", "");
+        return "https://www.google.com/s2/favicons?sz=64&domain=" + domain;
     }
 }
