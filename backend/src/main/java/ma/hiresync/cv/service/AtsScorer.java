@@ -99,6 +99,88 @@ public class AtsScorer {
     }
 
     /**
+     * Job-specific ATS match result: an explainable, deterministic score of how
+     * well a CV matches ONE job, plus which of the job's keywords are present/absent.
+     */
+    public record JobMatch(
+            int score,                 // 0–100, weighted ATS-style score for this job
+            int keywordMatchPct,       // % of job keywords found in the CV
+            List<String> matched,      // job keywords present in the CV
+            List<String> missing       // job keywords absent from the CV
+    ) {}
+
+    /**
+     * Compute a job-specific ATS match score for {@code cvText} against the
+     * keywords extracted from a job description. Deterministic and explainable —
+     * mirrors how real ATS systems weight keyword relevance most heavily.
+     *
+     * Weighting (research-based, see README §ATS):
+     *   - Keyword match     → 55 pts  (dominant factor, 40–50% in real ATS)
+     *   - Section presence  → 20 pts  (summary, experience, education, skills)
+     *   - Contact info      → 10 pts  (email + phone in body)
+     *   - Impact markers    → 15 pts  (action verbs + quantified achievements)
+     */
+    public JobMatch computeJobMatch(String cvText, List<String> jdKeywords) {
+        String lower = cvText == null ? "" : cvText.toLowerCase();
+
+        // ── Keyword match (55 pts) ──────────────────────────────────────────
+        List<String> matched = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+        if (jdKeywords != null) {
+            for (String kw : jdKeywords) {
+                if (kw == null || kw.isBlank()) continue;
+                if (containsKeyword(lower, kw.toLowerCase().trim())) matched.add(kw.trim());
+                else missing.add(kw.trim());
+            }
+        }
+        int total = matched.size() + missing.size();
+        int keywordPct = total == 0 ? 0 : (int) Math.round(100.0 * matched.size() / total);
+        double keywordPts = total == 0 ? 30 : 55.0 * matched.size() / total;
+
+        // ── Section presence (20 pts: 5 each for summary, experience, education, skills) ─
+        int sectionPts = 0;
+        if (containsAny(lower, "résumé", "resume", "summary", "profil", "objectif", "à propos")) sectionPts += 5;
+        if (containsAny(lower, "expérience", "experience", "parcours"))                          sectionPts += 5;
+        if (containsAny(lower, "formation", "education", "diplôme", "études"))                    sectionPts += 5;
+        if (containsAny(lower, "compétences", "skills", "competences"))                          sectionPts += 5;
+
+        // ── Contact info (10 pts) ──────────────────────────────────────────
+        int contactPts = 0;
+        if (lower.contains("@")) contactPts += 5;
+        if (lower.matches("(?s).*\\d{6,}.*") || containsAny(lower, "tél", "tel", "phone")) contactPts += 5;
+
+        // ── Impact markers (15 pts: action verbs + quantified achievements) ─
+        long verbs = ACTION_VERBS.stream().filter(lower::contains).count();
+        int verbPts = (int) Math.min(verbs * 2, 8);
+        boolean quantified = cvText != null && cvText.matches("(?s).*\\d+\\s?%.*")  // percentages
+                || lower.matches("(?s).*\\d{2,}.*");                                 // any sizable number
+        int impactPts = verbPts + (quantified ? 7 : 0);
+
+        int score = (int) Math.round(Math.min(100, keywordPts + sectionPts + contactPts + impactPts));
+        return new JobMatch(score, keywordPct, matched, missing);
+    }
+
+    /** Case-insensitive keyword presence. Multi-word keywords match as a substring;
+     *  single tokens match on word-ish boundaries so "java" doesn't match "javascript". */
+    private boolean containsKeyword(String haystackLower, String keywordLower) {
+        if (keywordLower.isBlank()) return false;
+        if (keywordLower.contains(" ") || keywordLower.length() <= 3) {
+            // phrases & short tokens (C#, SQL, AWS): plain substring is reliable enough
+            return haystackLower.contains(keywordLower);
+        }
+        // single word: require a non-letter boundary to avoid "java" ⊂ "javascript"
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(?<![a-zà-ÿ])" + java.util.regex.Pattern.quote(keywordLower) + "(?![a-zà-ÿ])")
+                .matcher(haystackLower);
+        return m.find();
+    }
+
+    private boolean containsAny(String haystack, String... needles) {
+        for (String n : needles) if (haystack.contains(n)) return true;
+        return false;
+    }
+
+    /**
      * Parse the CV text into labelled sections for display in the frontend.
      */
     public Map<String, String> parseSections(String text) {

@@ -51,6 +51,15 @@ public class CvOptimization {
     /** Profession the target job belongs to (e.g. "Assistant commercial"). */
     private String targetProfile;
 
+    // ── ATS keyword analysis (CV ↔ job description) ──────────────────────────
+    /** JSON array of job keywords found in the optimized CV. */
+    @Column(columnDefinition = "TEXT")
+    private String matchedKeywordsJson;
+
+    /** JSON array of job keywords still missing after optimization. */
+    @Column(columnDefinition = "TEXT")
+    private String missingKeywordsJson;
+
     /** Raw JSON array of SuggestedChange objects returned by the LLM */
     @Column(columnDefinition = "TEXT")
     private String suggestedChangesJson;

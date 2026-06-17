@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -102,31 +103,41 @@ public class OptimizationConsumer {
             // ── Step 2: Call OpenRouter (Gemma 4 31B free) ───────────────────
             String llmResponse = openRouter.optimizeCv(cvText, msg.jobDescription());
 
-            // ── Step 3: Split the combined response into {suggestions, optimizedCv}
+            // ── Step 3: Split the response into {atsKeywords, suggestions, optimizedCv}
             String suggestionsJson = extractSuggestions(llmResponse);
             String optimizedCvJson = extractOptimizedCv(llmResponse);
+            List<String> atsKeywords = extractAtsKeywords(llmResponse);
 
-            // ── Step 4: Compute new ATS score ────────────────────────────────
-            int suggCount  = countSuggestions(suggestionsJson);
-            int newScore   = Math.min(cv.getAtsScore() + (suggCount * 5) + 8, 100);
+            // ── Step 4: Real, job-specific ATS scoring ───────────────────────
+            // Score the ORIGINAL CV and the OPTIMIZED CV against the SAME job
+            // keywords → an honest, explainable before/after for this offer.
+            String optimizedText = flattenCv(optimizedCvJson);
+            AtsScorer.JobMatch before = atsScorer.computeJobMatch(cvText, atsKeywords);
+            AtsScorer.JobMatch after  = atsScorer.computeJobMatch(optimizedText, atsKeywords);
 
             // ── Step 5: Persist result ───────────────────────────────────────
             optim.setStatus(CvOptimization.OptimizationStatus.COMPLETED);
-            optim.setOptimizedScore(newScore);
+            optim.setOriginalScore(before.score());            // job-specific, replaces generic upload score
+            optim.setOptimizedScore(after.score());
             optim.setSuggestedChangesJson(suggestionsJson);
             optim.setOptimizedCvJson(optimizedCvJson);
+            optim.setMatchedKeywordsJson(toJsonArray(after.matched()));
+            optim.setMissingKeywordsJson(toJsonArray(after.missing()));
             optim.setModelUsed("google/gemma-4-31b-it:free");
             optim.setProcessingTimeMs(System.currentTimeMillis() - start);
             optim.setCompletedAt(Instant.now());
             optimRepo.save(optim);
 
-            // ── Step 5: Push WebSocket notification ──────────────────────────
+            // ── Step 6: Push WebSocket notification ──────────────────────────
             notificationSvc.pushCvOptimizationEvent(
                 userId, optim.getId(), "completed",
-                String.format("CV optimisé ! Score : %d%% → %d%%", cv.getAtsScore(), newScore)
+                String.format("CV optimisé ! Score ATS : %d%% → %d%% (%d/%d mots-clés)",
+                    before.score(), after.score(), after.matched().size(),
+                    after.matched().size() + after.missing().size())
             );
-            log.info("Optimization {} completed in {}ms. Score {}%→{}%",
-                optim.getId(), System.currentTimeMillis() - start, cv.getAtsScore(), newScore);
+            log.info("Optimization {} completed in {}ms. ATS {}%→{}%, keywords {}/{} matched",
+                optim.getId(), System.currentTimeMillis() - start, before.score(), after.score(),
+                after.matched().size(), after.matched().size() + after.missing().size());
 
         } catch (Exception e) {
             log.error("Optimization {} failed: {}", msg.optimizationId(), e.getMessage(), e);
@@ -181,5 +192,44 @@ public class OptimizationConsumer {
             }
         } catch (Exception ignored) {}
         return null;
+    }
+
+    /** Extract the "atsKeywords" array (the important keywords pulled from the job description). */
+    private List<String> extractAtsKeywords(String llmResponse) {
+        var root = parseRoot(llmResponse);
+        List<String> out = new java.util.ArrayList<>();
+        if (root != null && root.has("atsKeywords") && root.get("atsKeywords").isArray()) {
+            root.get("atsKeywords").forEach(n -> {
+                String s = n.asText("").trim();
+                if (!s.isEmpty()) out.add(s);
+            });
+        }
+        return out;
+    }
+
+    /** Flatten the structured optimized CV JSON into one text blob for keyword scoring. */
+    private String flattenCv(String optimizedCvJson) {
+        if (optimizedCvJson == null || optimizedCvJson.isBlank()) return "";
+        try {
+            var node = objectMapper.readTree(optimizedCvJson);
+            // Plain text of every value (summary, skills, competencies, bullets, …)
+            StringBuilder sb = new StringBuilder();
+            collectText(node, sb);
+            return sb.toString();
+        } catch (Exception e) {
+            return optimizedCvJson; // fall back to raw JSON text — still contains the keywords
+        }
+    }
+
+    private void collectText(com.fasterxml.jackson.databind.JsonNode node, StringBuilder sb) {
+        if (node == null) return;
+        if (node.isValueNode()) { sb.append(node.asText()).append(' '); return; }
+        node.forEach(child -> collectText(child, sb));
+    }
+
+    /** Serialize a list of strings to a JSON array string for storage. */
+    private String toJsonArray(List<String> items) {
+        try { return objectMapper.writeValueAsString(items); }
+        catch (Exception e) { return "[]"; }
     }
 }

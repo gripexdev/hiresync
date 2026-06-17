@@ -294,3 +294,43 @@ $primary: #2E86AB; $accent: #17A589;
   a { display: inline-flex; align-items: center; gap: 6px; }
   mat-icon { font-size: 18px; width: 18px; height: 18px; }
 }
+
+// ── ATS keyword analysis card ───────────────────────────────────────────────────
+.ats-card {
+  padding: 22px 24px; margin-bottom: 22px;
+  display: flex; flex-direction: column; gap: 14px;
+
+  &__head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    h2 {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 16px; font-weight: 700; color: #1A202C; margin: 0;
+      mat-icon { color: $primary; font-size: 20px; width: 20px; height: 20px; }
+    }
+  }
+  &__count {
+    font-size: 13px; font-weight: 700; color: $accent;
+    background: rgba(23,165,137,.1); padding: 4px 12px; border-radius: 9999px;
+    white-space: nowrap;
+  }
+  &__hint { font-size: 13px; color: #64748B; margin: 0; line-height: 1.5; }
+}
+
+.kw-group {
+  display: flex; flex-direction: column; gap: 8px;
+  &__label {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    mat-icon { font-size: 16px; width: 16px; height: 16px; }
+    &--ok   { color: #059669; }
+    &--miss { color: #94A3B8; }
+  }
+  &__note { font-size: 12px; color: #94A3B8; margin: 2px 0 0; font-style: italic; }
+}
+
+.kw-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.kw-chip {
+  padding: 4px 11px; border-radius: 9999px; font-size: 12px; font-weight: 600;
+  &--ok   { background: #D1FAE5; color: #065F46; }
+  &--miss { background: #F1F5F9; color: #64748B; border: 1px dashed #CBD5E1; }
+}

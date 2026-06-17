@@ -196,6 +196,47 @@
       </div>
     </div>
 
+    <!-- ATS keyword analysis -->
+    @if ((r.matchedKeywords?.length ?? 0) + (r.missingKeywords?.length ?? 0) > 0) {
+      <div class="hs-card ats-card">
+        <div class="ats-card__head">
+          <h2><mat-icon>find_in_page</mat-icon> Analyse ATS — mots-clés de l'offre</h2>
+          <span class="ats-card__count">
+            {{ r.matchedKeywords?.length ?? 0 }}/{{ (r.matchedKeywords?.length ?? 0) + (r.missingKeywords?.length ?? 0) }} couverts
+          </span>
+        </div>
+        <p class="ats-card__hint">
+          Les systèmes ATS classent votre CV surtout selon les mots-clés de l'offre.
+          Voici ceux que votre CV optimisé couvre, et ceux qui manquent encore.
+        </p>
+
+        @if ((r.matchedKeywords?.length ?? 0) > 0) {
+          <div class="kw-group">
+            <span class="kw-group__label kw-group__label--ok"><mat-icon>check_circle</mat-icon> Couverts</span>
+            <div class="kw-chips">
+              @for (kw of r.matchedKeywords; track kw) {
+                <span class="kw-chip kw-chip--ok">{{ kw }}</span>
+              }
+            </div>
+          </div>
+        }
+
+        @if ((r.missingKeywords?.length ?? 0) > 0) {
+          <div class="kw-group">
+            <span class="kw-group__label kw-group__label--miss"><mat-icon>radio_button_unchecked</mat-icon> Encore manquants</span>
+            <div class="kw-chips">
+              @for (kw of r.missingKeywords; track kw) {
+                <span class="kw-chip kw-chip--miss">{{ kw }}</span>
+              }
+            </div>
+            <p class="kw-group__note">
+              Ces compétences apparaissent dans l'offre mais pas dans votre CV. Ne les ajoutez que si vous les possédez réellement.
+            </p>
+          </div>
+        }
+      </div>
+    }
+
     <!-- Changes + download -->
     <div class="optimizer-grid">
       <!-- Suggested changes -->

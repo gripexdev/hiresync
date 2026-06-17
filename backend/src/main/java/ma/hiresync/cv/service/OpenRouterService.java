@@ -182,7 +182,9 @@ public class OpenRouterService {
 
     private String buildPrompt(String cvText, String jobDescription) {
         return """
-            You are optimizing a CV for a specific job. Return ONE JSON object with TWO keys: "optimizedCv" and "suggestions".
+            You are an expert ATS resume optimizer. Optimize a CV for a specific job so it ranks
+            highly in Applicant Tracking Systems. Return ONE JSON object with THREE keys:
+            "atsKeywords", "optimizedCv" and "suggestions".
 
             ## ORIGINAL CV TEXT:
             %s
@@ -192,16 +194,18 @@ public class OpenRouterService {
 
             ## OUTPUT FORMAT (return ONLY this JSON object, no markdown fences):
             {
+              "atsKeywords": ["the 12-18 most important ATS keywords from the JOB DESCRIPTION: hard skills, tools, technologies, certifications, methodologies and role-specific terms — use the job's EXACT wording"],
               "optimizedCv": {
                 "fullName": "candidate full name extracted from the CV",
-                "jobTitle": "a professional title tailored to the target job (in French)",
+                "jobTitle": "a professional title that mirrors the target job title (French)",
                 "contact": { "email": "", "phone": "", "location": "", "linkedin": "" },
-                "summary": "a 2-3 sentence professional summary rewritten to target the job (French)",
+                "summary": "2-3 sentence professional summary targeting the job, front-loading the most important job keywords (French)",
+                "coreCompetencies": ["8-12 keywords from atsKeywords that the candidate can TRUTHFULLY claim, exact JD wording"],
                 "experience": [
-                  { "role": "", "company": "", "dates": "", "bullets": ["achievement with action verb and metrics", "..."] }
+                  { "role": "", "company": "", "dates": "", "bullets": ["action verb + what + quantified result, weaving in job keywords"] }
                 ],
                 "education": [ { "degree": "", "school": "", "dates": "" } ],
-                "skills": ["skill1", "skill2"],
+                "skills": ["skills using the job's exact terminology; include full term + abbreviation e.g. 'Intégration Continue (CI/CD)'"],
                 "languages": ["Francais", "Anglais"]
               },
               "suggestions": [
@@ -212,10 +216,13 @@ public class OpenRouterService {
               ]
             }
 
-            ## RULES:
-            - Rewrite content to maximize ATS score for the target job: inject missing keywords from the job description into skills and experience bullets, use strong action verbs, quantify achievements.
-            - Keep all information truthful — do NOT invent jobs or degrees that aren't in the original.
-            - All rewritten text in French. Maximum 6 suggestions. Maximum 4 experience entries.
+            ## ATS RULES (follow precisely):
+            - KEYWORDS ARE #1: mirror the job's EXACT terminology. If the JD says "gestion de projet", use that, not a synonym. Include full term + abbreviation where relevant: "Search Engine Optimization (SEO)".
+            - Incorporate every keyword from "atsKeywords" that the candidate can TRUTHFULLY claim into coreCompetencies, skills, summary and experience bullets. Place the most important keywords in the summary and coreCompetencies (higher ATS weight).
+            - Quantify achievements: action verb + concrete result with a number/percentage wherever the original supports it.
+            - Weave soft skills into achievements (e.g. "collaboré avec 3 équipes pour réduire les délais de 15%%"), do not just list them.
+            - TRUTHFUL ONLY: never invent jobs, degrees, tools or numbers absent from the original CV. If a job keyword is not credible for this candidate, leave it out of coreCompetencies/skills (it stays in atsKeywords as a gap).
+            - Use standard ATS section names. All rewritten text in French. Max 6 suggestions. Max 4 experience entries.
             - Extract real contact info from the CV text if present.
             """.formatted(
                 cvText.substring(0, Math.min(cvText.length(), 3000)),

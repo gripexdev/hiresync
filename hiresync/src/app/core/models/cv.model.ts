@@ -57,6 +57,9 @@ export interface CVOptimizationResult {
   rejectionReason?: string;     // set when status === 'rejected'
   candidateProfile?: string;    // profession detected from the CV
   targetProfile?: string;       // profession the job targets
+  // ── ATS keyword analysis (CV ↔ job description) ──
+  matchedKeywords?: string[];   // job keywords now present in the CV
+  missingKeywords?: string[];   // job keywords still missing
   suggestedChanges: SuggestedChange[];
   optimizedCvUrl?: string;
   modelUsed?: string;      // e.g. "mistralai/mistral-7b-instruct:free"

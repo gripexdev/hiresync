@@ -1,8 +1,10 @@
 package ma.hiresync.cv.dto;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import ma.hiresync.cv.entity.CvOptimization;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public record OptimizationResponse(
@@ -18,6 +20,8 @@ public record OptimizationResponse(
         String rejectionReason,
         String candidateProfile,
         String targetProfile,
+        List<String> matchedKeywords,
+        List<String> missingKeywords,
         Object suggestedChanges,
         String optimizedCvUrl,
         String modelUsed,
@@ -25,6 +29,8 @@ public record OptimizationResponse(
         Instant createdAt,
         Instant completedAt
 ) {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     public static OptimizationResponse from(CvOptimization opt, Object changes) {
         String cvUrl = opt.getOptimizedCvPath() != null
             ? "/api/cv/download/" + opt.getId()
@@ -42,6 +48,8 @@ public record OptimizationResponse(
             opt.getRejectionReason(),
             opt.getCandidateProfile(),
             opt.getTargetProfile(),
+            parseStringArray(opt.getMatchedKeywordsJson()),
+            parseStringArray(opt.getMissingKeywordsJson()),
             changes,
             cvUrl,
             opt.getModelUsed(),
@@ -49,5 +57,11 @@ public record OptimizationResponse(
             opt.getCreatedAt(),
             opt.getCompletedAt()
         );
+    }
+
+    private static List<String> parseStringArray(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try { return MAPPER.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {}); }
+        catch (Exception e) { return List.of(); }
     }
 }
