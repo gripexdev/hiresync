@@ -153,14 +153,14 @@ export class CvService {
 
   // ── Polling helper ────────────────────────────────────────────────────────
   /**
-   * Polls GET /api/cv/optimize/{id} every 3s until status is 'completed'|'failed'.
-   * Used as fallback when WebSocket notification is not received.
-   * Cancel by unsubscribing (takeUntil pattern).
+   * Polls GET /api/cv/optimize/{id} every 3s until a terminal status
+   * ('completed' | 'failed' | 'rejected'). Used as fallback when the
+   * WebSocket notification is not received. Cancel by unsubscribing.
    */
   pollUntilDone(id: string, cancel$: Subject<void>): Observable<CVOptimizationResult> {
     return timer(3000, 3000).pipe(
       switchMap(() => this.getOptimizationResult(id)),
-      filter(r => r.status === 'completed' || r.status === 'failed'),
+      filter(r => r.status === 'completed' || r.status === 'failed' || r.status === 'rejected'),
       takeUntil(cancel$),
     );
   }

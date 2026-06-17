@@ -15,12 +15,12 @@
         <div class="ai-pulse-core"><mat-icon>auto_awesome</mat-icon></div>
       </div>
 
-      <h2>Notre IA optimise votre CV…</h2>
+      <h2>Notre IA analyse votre candidature…</h2>
       <p>
         @if (jobTitle()) {
-          Analyse de l'offre "<strong>{{ jobTitle() }}</strong>" et réécriture des sections pour maximiser votre score ATS
+          Nous vérifions d'abord que votre profil correspond à l'offre "<strong>{{ jobTitle() }}</strong>", puis nous réécrivons vos sections pour maximiser votre score ATS
         } @else {
-          Analyse de l'offre et réécriture des sections pour maximiser votre score ATS
+          Nous vérifions d'abord que votre profil correspond à l'offre, puis nous réécrivons vos sections pour maximiser votre score ATS
         }
       </p>
 
@@ -49,7 +49,7 @@
         <div class="ai-transport__sep">→</div>
         <div class="ai-transport__item ai-transport__item--model">
           <mat-icon>psychology</mat-icon>
-          <span>mistralai/mistral-7b-instruct:free</span>
+          <span>google/gemma-4-31b-it:free</span>
         </div>
         <div class="ai-transport__sep">→</div>
         <div class="ai-transport__item">
@@ -265,7 +265,7 @@
           <div class="ai-info-rows">
             <div class="ai-info-row">
               <span>Modèle</span>
-              <span class="mono">{{ r.modelUsed ?? 'Mistral 7B' }}</span>
+              <span class="mono">{{ r.modelUsed ?? 'Gemma 4 31B' }}</span>
             </div>
             @if (r.processingTimeMs) {
               <div class="ai-info-row">

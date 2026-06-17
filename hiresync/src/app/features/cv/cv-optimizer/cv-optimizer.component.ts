@@ -39,9 +39,9 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
   result    = signal<CVOptimizationResult | null>(null);
   status    = signal<OptimizationStatus>('queued');
   steps     = signal<ProcessStep[]>([
-    { label: 'Analyse de l\'offre d\'emploi',               status: 'pending' },
-    { label: 'Extraction des mots-clés ATS critiques',      status: 'pending' },
-    { label: 'Réécriture des sections par LLM (Mistral 7B)', status: 'pending' },
+    { label: 'Vérification de la compatibilité profil ↔ offre', status: 'pending' },
+    { label: 'Analyse de l\'offre et extraction des mots-clés ATS', status: 'pending' },
+    { label: 'Réécriture des sections par l\'IA (Gemma 4 31B)', status: 'pending' },
     { label: 'Calcul du score ATS final',                   status: 'pending' },
   ]);
 
