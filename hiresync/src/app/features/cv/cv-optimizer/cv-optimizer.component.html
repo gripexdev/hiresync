@@ -76,6 +76,65 @@
 }
 
 <!-- ══════════════════════════════════════════════════════════════════════════
+     REJECTED STATE — profile incompatible with the job
+════════════════════════════════════════════════════════════════════════════ -->
+@if (status() === 'rejected') {
+  @if (result(); as r) {
+    <div class="reject-state">
+      <div class="hs-card reject-card">
+        <div class="reject-card__icon"><mat-icon>block</mat-icon></div>
+        <h2>Optimisation impossible</h2>
+        <p class="reject-card__lead">
+          Votre profil ne correspond pas à cette offre. Optimiser ce CV reviendrait à
+          inventer une expérience que vous n'avez pas — nous préférons vous orienter vers
+          des offres réellement adaptées.
+        </p>
+
+        <!-- Profile mismatch -->
+        <div class="reject-profiles">
+          <div class="reject-profile">
+            <span class="reject-profile__label">Votre profil</span>
+            <span class="reject-profile__value">{{ r.candidateProfile || 'Profil détecté' }}</span>
+          </div>
+          <mat-icon class="reject-profiles__arrow">arrow_forward</mat-icon>
+          <div class="reject-profile reject-profile--target">
+            <span class="reject-profile__label">Poste visé</span>
+            <span class="reject-profile__value">{{ r.targetProfile || r.jobTitle }}</span>
+          </div>
+        </div>
+
+        <!-- Compatibility score bar -->
+        <div class="reject-compat">
+          <div class="reject-compat__head">
+            <span>Compatibilité</span>
+            <strong>{{ r.compatibilityScore }}%</strong>
+          </div>
+          <div class="reject-compat__bar">
+            <div class="reject-compat__fill" [style.width.%]="r.compatibilityScore"></div>
+          </div>
+        </div>
+
+        @if (r.rejectionReason) {
+          <div class="reject-reason">
+            <mat-icon>info</mat-icon>
+            <p>{{ r.rejectionReason }}</p>
+          </div>
+        }
+
+        <div class="reject-actions">
+          <a routerLink="/jobs" class="hs-btn-primary">
+            <mat-icon>search</mat-icon> Trouver des offres adaptées
+          </a>
+          <a routerLink="/cv" class="hs-btn-secondary">
+            <mat-icon>arrow_back</mat-icon> Retour au CV Manager
+          </a>
+        </div>
+      </div>
+    </div>
+  }
+}
+
+<!-- ══════════════════════════════════════════════════════════════════════════
      COMPLETED STATE
 ════════════════════════════════════════════════════════════════════════════ -->
 @if (status() === 'completed') {
@@ -83,6 +142,7 @@
     <div class="page-header">
       <h1>Résultat de l'optimisation</h1>
       <p>CV optimisé pour : <strong>{{ r.jobTitle }}</strong>
+        @if (r.compatibilityScore) { · <span class="compat-badge"><mat-icon>verified</mat-icon> Compatibilité {{ r.compatibilityScore }}%</span> }
         @if (r.modelUsed) { · <span class="model-badge">{{ r.modelUsed }}</span> }
         @if (r.processingTimeMs) { · {{ (r.processingTimeMs / 1000).toFixed(1) }}s }
       </p>

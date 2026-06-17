@@ -49,6 +49,7 @@ const MOCK_RESULT: CVOptimizationResult = {
   cvId: 'cv1', jobId: 'j1',
   jobTitle: 'Ingénieur DevOps Senior',
   originalScore: 62, optimizedScore: 88,
+  compatibilityScore: 84,
   modelUsed: 'mistralai/mistral-7b-instruct:free',
   processingTimeMs: 8400,
   suggestedChanges: [

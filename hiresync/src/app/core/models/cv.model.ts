@@ -52,6 +52,11 @@ export interface CVOptimizationResult {
   jobTitle: string;
   originalScore: number;
   optimizedScore: number;
+  // ── Pre-flight compatibility check (CV ↔ job) ──
+  compatibilityScore: number;
+  rejectionReason?: string;     // set when status === 'rejected'
+  candidateProfile?: string;    // profession detected from the CV
+  targetProfile?: string;       // profession the job targets
   suggestedChanges: SuggestedChange[];
   optimizedCvUrl?: string;
   modelUsed?: string;      // e.g. "mistralai/mistral-7b-instruct:free"
@@ -60,7 +65,7 @@ export interface CVOptimizationResult {
   completedAt?: string;
 }
 
-export type OptimizationStatus = 'pending' | 'queued' | 'processing' | 'completed' | 'failed';
+export type OptimizationStatus = 'pending' | 'queued' | 'processing' | 'completed' | 'failed' | 'rejected';
 
 export interface SuggestedChange {
   type: 'keyword_added' | 'section_rewritten' | 'format_improved' | 'skill_added';

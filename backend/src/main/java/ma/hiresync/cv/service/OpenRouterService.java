@@ -1,11 +1,14 @@
 package ma.hiresync.cv.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import ma.hiresync.cv.dto.CompatibilityVerdict;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -25,6 +28,7 @@ public class OpenRouterService {
     private final String apiKey;
     private final String primaryModel;
     private final List<String> fallbackModels;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public OpenRouterService(
             @Value("${hiresync.openrouter.api-key}") String apiKey,
@@ -58,37 +62,67 @@ public class OpenRouterService {
             return mockOptimization();
         }
 
-        String prompt = buildPrompt(cvText, jobDescription);
+        String systemPrompt =
+            "You are an expert ATS CV optimizer. You respond ONLY with a single valid JSON object, no markdown, no commentary.";
+        return callWithFallback(systemPrompt, buildPrompt(cvText, jobDescription), 2800, 0.3);
+    }
 
-        // Try primary model, then fallbacks
-        List<String> models = new java.util.ArrayList<>();
+    /**
+     * Pre-flight check: is this candidate a credible applicant for this job?
+     *
+     * Returns a verdict the optimizer uses to STOP unrealistic optimizations
+     * (e.g. a software developer targeting a "commercial assistant" role).
+     * Fails open — if the LLM call fails or the response can't be parsed, we
+     * allow the optimization rather than block the user on an infra hiccup.
+     */
+    public CompatibilityVerdict assessCompatibility(String cvText, String jobTitle, String jobDescription) {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("OPENROUTER_API_KEY not set — skipping compatibility check");
+            return CompatibilityVerdict.allowByDefault();
+        }
+
+        String systemPrompt =
+            "You are a senior career advisor and recruiter. You judge whether a candidate is a "
+          + "realistic, credible applicant for a target job. You respond ONLY with a single valid "
+          + "JSON object, no markdown, no commentary.";
+
+        try {
+            String raw = callWithFallback(systemPrompt, buildCompatibilityPrompt(cvText, jobTitle, jobDescription), 700, 0.1);
+            return parseVerdict(raw);
+        } catch (Exception e) {
+            log.warn("Compatibility check failed ({}) — allowing optimization by default", e.getMessage());
+            return CompatibilityVerdict.allowByDefault();
+        }
+    }
+
+    // ── Shared OpenRouter call with model fallback ────────────────────────────
+    private String callWithFallback(String systemPrompt, String userPrompt, int maxTokens, double temperature) {
+        List<String> models = new ArrayList<>();
         models.add(primaryModel);
         models.addAll(fallbackModels);
 
         for (String model : models) {
             try {
                 log.info("Calling OpenRouter model: {}", model);
-                String result = callModel(model, prompt);
+                String result = callModel(model, systemPrompt, userPrompt, maxTokens, temperature);
                 log.info("OpenRouter responded successfully with model: {}", model);
                 return result;
             } catch (Exception e) {
                 log.warn("Model {} failed: {} — trying next fallback", model, e.getMessage());
             }
         }
-
         throw new RuntimeException("All OpenRouter models failed");
     }
 
-    private String callModel(String model, String prompt) {
+    private String callModel(String model, String systemPrompt, String userPrompt, int maxTokens, double temperature) {
         var body = Map.of(
             "model", model,
             "messages", List.of(
-                Map.of("role", "system", "content",
-                    "You are an expert ATS CV optimizer. You respond ONLY with a single valid JSON object, no markdown, no commentary."),
-                Map.of("role", "user", "content", prompt)
+                Map.of("role", "system", "content", systemPrompt),
+                Map.of("role", "user", "content", userPrompt)
             ),
-            "max_tokens", 2800,
-            "temperature", 0.3
+            "max_tokens", maxTokens,
+            "temperature", temperature
         );
 
         var response = webClient.post()
@@ -151,6 +185,84 @@ public class OpenRouterService {
                 cvText.substring(0, Math.min(cvText.length(), 3000)),
                 jobDescription.substring(0, Math.min(jobDescription.length(), 1200))
             );
+    }
+
+    private String buildCompatibilityPrompt(String cvText, String jobTitle, String jobDescription) {
+        return """
+            Assess whether this candidate is a CREDIBLE, REALISTIC applicant for the target job.
+
+            ## CANDIDATE CV:
+            %s
+
+            ## TARGET JOB TITLE:
+            %s
+
+            ## TARGET JOB DESCRIPTION:
+            %s
+
+            ## DECISION RULES:
+            - "compatible": true ONLY if the candidate's background makes them a believable applicant —
+              the SAME profession, an ADJACENT/transferable specialization, or a NATURAL next career step.
+              Examples that ARE compatible: Software Developer → DevOps Engineer, Backend Dev → Full Stack Dev,
+              Accountant → Financial Analyst, Sales Rep → Account Manager.
+            - "compatible": false if the role belongs to a FUNDAMENTALLY DIFFERENT profession requiring skills,
+              training, or domain knowledge the candidate does NOT demonstrate.
+              Examples that are NOT compatible: Software Developer → Commercial Assistant,
+              Software Developer → Nurse, Chef → Software Architect, Accountant → Graphic Designer.
+            - Do NOT reward a CV simply for being well written. Judge the PROFESSION FIT, not formatting.
+            - "score": 0–100 overall fit. Be honest and strict. A fundamentally wrong profession scores under 30.
+
+            ## OUTPUT (return ONLY this JSON object, no markdown fences):
+            {
+              "compatible": true,
+              "score": 0,
+              "verdict": "one or two sentences in French explaining the decision",
+              "candidateProfile": "the candidate's profession, in French",
+              "targetProfile": "the job's profession, in French",
+              "transferableSkills": ["skills that genuinely carry over, in French"],
+              "missingCriticalSkills": ["critical skills/qualifications the candidate lacks, in French"]
+            }
+            """.formatted(
+                cvText.substring(0, Math.min(cvText.length(), 3000)),
+                jobTitle == null ? "" : jobTitle,
+                jobDescription.substring(0, Math.min(jobDescription.length(), 1200))
+            );
+    }
+
+    /** Parse the compatibility JSON verdict, tolerating markdown fences. */
+    private CompatibilityVerdict parseVerdict(String raw) {
+        if (raw == null || raw.isBlank()) return CompatibilityVerdict.allowByDefault();
+        String json = raw.trim()
+            .replaceAll("(?s)^```[a-zA-Z]*\\s*", "")
+            .replaceAll("(?s)\\s*```$", "")
+            .trim();
+        try {
+            JsonNode n = objectMapper.readTree(json);
+            int score = n.path("score").asInt(60);
+            return new CompatibilityVerdict(
+                n.path("compatible").asBoolean(true),
+                Math.max(0, Math.min(100, score)),
+                n.path("verdict").asText(""),
+                n.path("candidateProfile").asText(null),
+                n.path("targetProfile").asText(null),
+                toStringList(n.path("transferableSkills")),
+                toStringList(n.path("missingCriticalSkills"))
+            );
+        } catch (Exception e) {
+            log.warn("Could not parse compatibility verdict JSON: {}", e.getMessage());
+            return CompatibilityVerdict.allowByDefault();
+        }
+    }
+
+    private List<String> toStringList(JsonNode arr) {
+        List<String> out = new ArrayList<>();
+        if (arr != null && arr.isArray()) {
+            arr.forEach(el -> {
+                String s = el.asText("").trim();
+                if (!s.isEmpty()) out.add(s);
+            });
+        }
+        return out;
     }
 
     /** Fallback when no API key is configured (development mode) */

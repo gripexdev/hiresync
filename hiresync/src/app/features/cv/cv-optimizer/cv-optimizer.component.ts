@@ -105,6 +105,9 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
             this._markAllStepsDone();
             this.result.set(r);
             this.status.set('completed');
+          } else if (r.status === 'rejected') {
+            this.result.set(r);
+            this.status.set('rejected');
           } else if (r.status === 'failed') {
             this.status.set('failed');
           } else {
@@ -130,6 +133,9 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
       if (event.status === 'completed') {
         this.cancel$.next();   // stop polling
         this._loadResult();
+      } else if (event.status === 'rejected') {
+        this.cancel$.next();
+        this._loadRejection();
       } else if (event.status === 'failed') {
         this.cancel$.next();
         this.status.set('failed');
@@ -141,7 +147,21 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe(r => {
         if (r.status === 'completed') this._loadResult();
+        else if (r.status === 'rejected') this._loadRejection();
         else if (r.status === 'failed') this.status.set('failed');
+      });
+  }
+
+  /** Load the rejection verdict so the UI can explain why optimization was refused. */
+  private _loadRejection(): void {
+    this.cvSvc.getOptimizationResult(this.id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: r => {
+          this.result.set(r);
+          this.status.set('rejected');
+        },
+        error: () => this.status.set('failed'),
       });
   }
 

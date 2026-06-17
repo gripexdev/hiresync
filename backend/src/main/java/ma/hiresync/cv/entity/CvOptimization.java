@@ -37,6 +37,20 @@ public class CvOptimization {
     private int originalScore;
     private int optimizedScore;
 
+    // ── Pre-flight compatibility check (CV ↔ job) ────────────────────────────
+    /** 0–100 fit between the candidate's profile and the target job. */
+    private int compatibilityScore;
+
+    /** Why the optimization was rejected (only set when status = REJECTED). */
+    @Column(columnDefinition = "TEXT")
+    private String rejectionReason;
+
+    /** Profession detected from the CV (e.g. "Développeur logiciel"). */
+    private String candidateProfile;
+
+    /** Profession the target job belongs to (e.g. "Assistant commercial"). */
+    private String targetProfile;
+
     /** Raw JSON array of SuggestedChange objects returned by the LLM */
     @Column(columnDefinition = "TEXT")
     private String suggestedChangesJson;
@@ -61,6 +75,8 @@ public class CvOptimization {
     private Instant completedAt;
 
     public enum OptimizationStatus {
-        QUEUED, PROCESSING, COMPLETED, FAILED
+        QUEUED, PROCESSING, COMPLETED, FAILED,
+        /** CV ↔ job are not a realistic match — optimization was stopped on purpose. */
+        REJECTED
     }
 }

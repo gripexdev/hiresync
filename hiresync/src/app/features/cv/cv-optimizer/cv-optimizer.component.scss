@@ -228,3 +228,69 @@ $primary: #2E86AB; $accent: #17A589;
   h3 { font-size: 13px; font-weight: 700; color: #1A202C; margin: 0; }
   p  { font-size: 12px; color: #64748B; margin: 0; line-height: 1.5; }
 }
+
+// ── Compatibility badge (completed result) ──────────────────────────────────────
+.compat-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 700; color: $accent;
+  mat-icon { font-size: 15px; width: 15px; height: 15px; }
+}
+
+// ── Rejected state ───────────────────────────────────────────────────────────────
+.reject-state { display: flex; justify-content: center; padding: 20px 0; }
+
+.reject-card {
+  max-width: 580px; width: 100%; padding: 36px 40px;
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px;
+
+  &__icon {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: rgba(239,68,68,.1);
+    display: flex; align-items: center; justify-content: center;
+    mat-icon { font-size: 38px; width: 38px; height: 38px; color: #EF4444; }
+  }
+  h2 { font-size: 22px; font-weight: 800; color: #1A202C; margin: 0; }
+  &__lead { font-size: 14px; color: #64748B; margin: 0; line-height: 1.6; max-width: 460px; }
+}
+
+.reject-profiles {
+  display: flex; align-items: stretch; gap: 12px; width: 100%; margin-top: 6px;
+  &__arrow { color: #94A3B8; align-self: center; }
+}
+.reject-profile {
+  flex: 1; padding: 14px 16px; border-radius: 12px;
+  background: #F1F5F9; border: 1px solid #E2E8F0;
+  display: flex; flex-direction: column; gap: 4px; text-align: left;
+  &__label { font-size: 11px; font-weight: 600; color: #94A3B8; text-transform: uppercase; letter-spacing: .04em; }
+  &__value { font-size: 14px; font-weight: 700; color: #1E293B; }
+  &--target { background: rgba(239,68,68,.05); border-color: rgba(239,68,68,.2); }
+}
+
+.reject-compat {
+  width: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 4px;
+  &__head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 13px; color: #64748B;
+    strong { font-size: 18px; font-weight: 800; color: #EF4444; }
+  }
+  &__bar { height: 8px; border-radius: 6px; background: #E2E8F0; overflow: hidden; }
+  &__fill {
+    height: 100%; border-radius: 6px;
+    background: linear-gradient(90deg, #F97316, #EF4444);
+    transition: width .6s ease;
+  }
+}
+
+.reject-reason {
+  display: flex; gap: 10px; align-items: flex-start; text-align: left;
+  width: 100%; padding: 14px 16px; border-radius: 12px;
+  background: rgba(59,130,246,.05); border: 1px solid rgba(59,130,246,.18);
+  mat-icon { font-size: 18px; width: 18px; height: 18px; color: #3B82F6; flex-shrink: 0; margin-top: 1px; }
+  p { font-size: 13px; color: #475569; margin: 0; line-height: 1.55; }
+}
+
+.reject-actions {
+  display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 8px;
+  a { display: inline-flex; align-items: center; gap: 6px; }
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}

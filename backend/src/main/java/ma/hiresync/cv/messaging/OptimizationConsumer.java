@@ -30,6 +30,9 @@ import java.util.UUID;
 @Slf4j
 public class OptimizationConsumer {
 
+    /** Below this CV↔job fit score, optimization is refused even if the LLM flags "compatible". */
+    private static final int MIN_COMPATIBILITY_SCORE = 45;
+
     private final CvOptimizationRepository optimRepo;
     private final CvRepository             cvRepo;
     private final OpenRouterService        openRouter;
@@ -65,10 +68,38 @@ public class OptimizationConsumer {
             optim.setStatus(CvOptimization.OptimizationStatus.PROCESSING);
             optimRepo.save(optim);
             notificationSvc.pushCvOptimizationEvent(userId, optim.getId(), "processing",
-                "Analyse et réécriture en cours par Gemma 4 31B…");
+                "Vérification de la compatibilité entre votre profil et l'offre…");
+
+            String cvText = cv.getExtractedText() != null ? cv.getExtractedText() : "";
+
+            // ── Step 1.5: Pre-flight compatibility gate ──────────────────────
+            // Stop unrealistic optimizations (e.g. software dev → commercial assistant)
+            // instead of fabricating a CV that doesn't fit the profession.
+            var verdict = openRouter.assessCompatibility(cvText, optim.getJobTitle(), msg.jobDescription());
+            optim.setCompatibilityScore(verdict.score());
+            optim.setCandidateProfile(verdict.candidateProfile());
+            optim.setTargetProfile(verdict.targetProfile());
+
+            if (!verdict.compatible() || verdict.score() < MIN_COMPATIBILITY_SCORE) {
+                optim.setStatus(CvOptimization.OptimizationStatus.REJECTED);
+                optim.setRejectionReason(verdict.verdict());
+                optim.setProcessingTimeMs(System.currentTimeMillis() - start);
+                optim.setCompletedAt(Instant.now());
+                optimRepo.save(optim);
+
+                notificationSvc.pushCvOptimizationEvent(
+                    userId, optim.getId(), "rejected",
+                    "Profil incompatible avec cette offre — optimisation non réalisable."
+                );
+                log.info("Optimization {} REJECTED — score {}%, {} → {}",
+                    optim.getId(), verdict.score(), verdict.candidateProfile(), verdict.targetProfile());
+                return;
+            }
+
+            notificationSvc.pushCvOptimizationEvent(userId, optim.getId(), "processing",
+                "Profil compatible — réécriture en cours par Gemma 4 31B…");
 
             // ── Step 2: Call OpenRouter (Gemma 4 31B free) ───────────────────
-            String cvText = cv.getExtractedText() != null ? cv.getExtractedText() : "";
             String llmResponse = openRouter.optimizeCv(cvText, msg.jobDescription());
 
             // ── Step 3: Split the combined response into {suggestions, optimizedCv}
