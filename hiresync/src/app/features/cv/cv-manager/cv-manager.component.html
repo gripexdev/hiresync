@@ -176,8 +176,8 @@
         <tr>
           <th>Poste ciblé</th>
           <th>Date</th>
-          <th>Avant</th>
-          <th>Après</th>
+          <th>Statut</th>
+          <th>Résultat</th>
           <th>Gain</th>
           <th>Modèle IA</th>
           <th></th>
@@ -185,36 +185,75 @@
       </thead>
       <tbody>
         @for (item of history(); track item.id) {
-          <tr [class.tr-failed]="item.status === 'failed'">
+          <tr [class.tr-failed]="item.status === 'failed'"
+              [class.tr-rejected]="item.status === 'rejected'">
             <td class="td-job">
               <span class="td-job__title">{{ item.jobTitle }}</span>
               <span class="td-job__company">{{ item.company }}</span>
             </td>
             <td>{{ item.createdAt | date:'dd/MM/yyyy' }}</td>
+
+            <!-- Statut -->
             <td>
-              <span class="score-chip score-chip--before">{{ item.originalScore }}%</span>
-            </td>
-            <td>
-              @if (item.status === 'failed') {
-                <span class="status-chip status-chip--failed">Échec</span>
-              } @else if (item.status === 'completed') {
-                <span class="score-chip score-chip--after">{{ item.optimizedScore }}%</span>
-              } @else {
-                <span class="status-chip status-chip--pending">En cours…</span>
+              @switch (item.status) {
+                @case ('completed') {
+                  <span class="status-chip status-chip--done"><mat-icon>check_circle</mat-icon> Optimisé</span>
+                }
+                @case ('rejected') {
+                  <span class="status-chip status-chip--rejected"><mat-icon>block</mat-icon> Incompatible</span>
+                }
+                @case ('failed') {
+                  <span class="status-chip status-chip--failed"><mat-icon>error</mat-icon> Échec</span>
+                }
+                @default {
+                  <span class="status-chip status-chip--pending"><mat-icon>hourglass_empty</mat-icon> En cours…</span>
+                }
               }
             </td>
+
+            <!-- Score / résultat -->
+            <td>
+              @if (item.status === 'completed') {
+                <span class="score-flow">
+                  <span class="score-chip score-chip--before">{{ item.originalScore }}%</span>
+                  <mat-icon class="score-flow__arrow">arrow_forward</mat-icon>
+                  <span class="score-chip score-chip--after">{{ item.optimizedScore }}%</span>
+                </span>
+              } @else if (item.status === 'rejected') {
+                <span class="compat-chip"
+                      matTooltip="Compatibilité entre votre profil et l'offre">
+                  {{ item.compatibilityScore ?? 0 }}% compatible
+                </span>
+              } @else {
+                <span class="td-muted">—</span>
+              }
+            </td>
+
+            <!-- Gain -->
             <td>
               @if (item.status === 'completed') {
                 <span class="gain-chip">+{{ item.optimizedScore - item.originalScore }} pts</span>
               } @else {
-                <span>—</span>
+                <span class="td-muted">—</span>
               }
             </td>
-            <td class="td-model">{{ modelLabel(item) }}</td>
+
+            <!-- Modèle IA — only meaningful when a rewrite actually ran -->
+            <td class="td-model">
+              @if (item.status === 'completed') { {{ modelLabel(item) }} }
+              @else { <span class="td-muted">—</span> }
+            </td>
+
+            <!-- Action -->
             <td>
               @if (item.status === 'completed') {
                 <a [routerLink]="'/cv/optimize/' + item.id" class="view-link"
                    matTooltip="Voir le résultat complet">
+                  <mat-icon>open_in_new</mat-icon>
+                </a>
+              } @else if (item.status === 'rejected') {
+                <a [routerLink]="'/cv/optimize/' + item.id" class="view-link"
+                   matTooltip="Voir pourquoi le profil ne correspond pas">
                   <mat-icon>open_in_new</mat-icon>
                 </a>
               } @else if (item.status === 'failed') {

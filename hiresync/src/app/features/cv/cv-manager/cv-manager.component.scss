@@ -181,13 +181,27 @@ $primary: #2E86AB; $accent: #17A589;
   &--after  { background: #D1FAE5; color: #065F46; }
 }
 
+// Before → after, shown inline for completed optimizations
+.score-flow {
+  display: inline-flex; align-items: center; gap: 6px;
+  &__arrow { font-size: 14px; width: 14px; height: 14px; color: #CBD5E1; }
+}
+
 .gain-chip {
   padding: 3px 9px; border-radius: 9999px;
   background: rgba(23,165,137,.1); color: $accent;
   font-size: 12px; font-weight: 700;
 }
 
-.td-model { font-size: 11px; color: #94A3B8; font-family: monospace; }
+// Compatibility % shown for rejected rows
+.compat-chip {
+  padding: 3px 9px; border-radius: 9999px;
+  background: #F1F5F9; color: #475569;
+  font-size: 12px; font-weight: 600; cursor: default;
+}
+
+.td-model  { font-size: 11px; color: #94A3B8; font-family: monospace; }
+.td-muted  { color: #CBD5E1; }
 
 .view-link {
   display: flex; align-items: center; justify-content: center;
@@ -203,11 +217,17 @@ $primary: #2E86AB; $accent: #17A589;
 }
 
 // Failed row — subtle red tint
-.tr-failed td { background: #FFF5F5; color: #94A3B8; }
+.tr-failed td   { background: #FFF5F5; }
+// Rejected row — subtle amber tint (a valid outcome, not an error)
+.tr-rejected td { background: #FFFBEB; }
 
-// Status chips
+// Status chips — icon + label
 .status-chip {
-  padding: 3px 9px; border-radius: 9999px; font-size: 12px; font-weight: 600;
-  &--failed  { background: #FEE2E2; color: #B91C1C; }
-  &--pending { background: #FEF3C7; color: #92400E; }
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600;
+  mat-icon { font-size: 14px; width: 14px; height: 14px; }
+  &--done     { background: #D1FAE5; color: #065F46; }
+  &--rejected { background: #FFEDD5; color: #C2410C; }
+  &--failed   { background: #FEE2E2; color: #B91C1C; }
+  &--pending  { background: #FEF3C7; color: #92400E; }
 }

@@ -88,6 +88,7 @@ export interface CVOptimizationHistoryItem {
   company: string;
   originalScore: number;
   optimizedScore: number;
+  compatibilityScore?: number;   // set for rejected/completed — CV ↔ job fit
   createdAt: string;
   status: OptimizationStatus;
   modelUsed?: string;
