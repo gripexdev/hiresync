@@ -95,23 +95,59 @@ public class OpenRouterService {
         }
     }
 
-    // ── Shared OpenRouter call with model fallback ────────────────────────────
+    // ── Shared OpenRouter call with model fallback + rate-limit backoff ───────
+    /** Max times to wait-and-retry the whole chain when every model is rate-limited (429). */
+    private static final int  RATE_LIMIT_RETRIES = 3;
+    private static final long RATE_LIMIT_BACKOFF_MS = 4000L;   // 4s, 8s, 12s
+
     private String callWithFallback(String systemPrompt, String userPrompt, int maxTokens, double temperature) {
         List<String> models = new ArrayList<>();
         models.add(primaryModel);
         models.addAll(fallbackModels);
 
-        for (String model : models) {
-            try {
-                log.info("Calling OpenRouter model: {}", model);
-                String result = callModel(model, systemPrompt, userPrompt, maxTokens, temperature);
-                log.info("OpenRouter responded successfully with model: {}", model);
-                return result;
-            } catch (Exception e) {
-                log.warn("Model {} failed: {} — trying next fallback", model, e.getMessage());
+        for (int attempt = 0; attempt <= RATE_LIMIT_RETRIES; attempt++) {
+            boolean rateLimited = false;
+
+            for (String model : models) {
+                try {
+                    log.info("Calling OpenRouter model: {}", model);
+                    String result = callModel(model, systemPrompt, userPrompt, maxTokens, temperature);
+                    log.info("OpenRouter responded successfully with model: {}", model);
+                    return result;
+                } catch (Exception e) {
+                    if (isRateLimit(e)) {
+                        // All :free models share one per-key limit — cycling them is futile.
+                        // Stop, back off, and retry the whole chain.
+                        rateLimited = true;
+                        log.warn("Model {} rate-limited (429) — will back off instead of cycling fallbacks", model);
+                        break;
+                    }
+                    log.warn("Model {} failed: {} — trying next fallback", model, e.getMessage());
+                }
+            }
+
+            if (!rateLimited) break;   // failures weren't rate-limit related → no point waiting
+
+            if (attempt < RATE_LIMIT_RETRIES) {
+                long waitMs = RATE_LIMIT_BACKOFF_MS * (attempt + 1);
+                log.warn("All models rate-limited — backing off {}ms (retry {}/{})", waitMs, attempt + 1, RATE_LIMIT_RETRIES);
+                try {
+                    Thread.sleep(waitMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
         }
         throw new RuntimeException("All OpenRouter models failed");
+    }
+
+    /** True if the failure is an HTTP 429 (rate limit / quota). */
+    private boolean isRateLimit(Throwable e) {
+        if (e instanceof org.springframework.web.reactive.function.client.WebClientResponseException w) {
+            return w.getStatusCode().value() == 429;
+        }
+        return e.getMessage() != null && e.getMessage().contains("429");
     }
 
     private String callModel(String model, String systemPrompt, String userPrompt, int maxTokens, double temperature) {
