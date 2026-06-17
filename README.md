@@ -14,7 +14,12 @@
    - [4.1 Authentification JWT](#41-authentification-jwt)
    - [4.2 Upload & Analyse ATS du CV](#42-upload--analyse-ats-du-cv)
    - [4.3 Optimisation IA (OpenRouter + Gemma 4)](#43-optimisation-ia-openrouter--gemma-4)
+     - [4.3.1 Vérification de compatibilité profil ↔ offre](#431-vérification-de-compatibilité-profil--offre)
+     - [4.3.2 Scoring ATS job-aware (mots-clés matched / missing)](#432-scoring-ats-job-aware-mots-clés-matched--missing)
+     - [4.3.3 Backoff/retry sur erreur 429 OpenRouter](#433-backoffretry-sur-erreur-429-openrouter)
    - [4.4 Pipeline RabbitMQ (traitement asynchrone)](#44-pipeline-rabbitmq-traitement-asynchrone)
+     - [4.4.1 Queue CV — optimisation IA](#441-queue-cv--optimisation-ia)
+     - [4.4.2 Queues Scraping — 5 sources en parallèle + chaîne d'enrichissement](#442-queues-scraping--5-sources-en-parallèle--chaîne-denrichissement)
    - [4.5 Notifications WebSocket (STOMP)](#45-notifications-websocket-stomp)
    - [4.6 Consultation de l'historique des optimisations](#46-consultation-de-lhistorique-des-optimisations)
    - [4.7 CV Studio — Template Designer & Export PDF](#47-cv-studio--template-designer--export-pdf)
@@ -28,6 +33,7 @@
      - [4.9.6 Source E — marocemploi.net (WordPress / FlareSolverr)](#496-source-e--marocemploinet-wordpress--flaresolverr)
    - [4.10 Enrichissement des descriptions (source-aware)](#410-enrichissement-des-descriptions-source-aware)
    - [4.11 Pagination côté serveur](#411-pagination-côté-serveur)
+   - [4.12 Filtres dynamiques avec comptages live](#412-filtres-dynamiques-avec-comptages-live)
 5. [Lancer le projet](#5-lancer-le-projet)
 6. [Endpoints API](#6-endpoints-api)
 7. [Variables de configuration](#7-variables-de-configuration)
@@ -268,7 +274,123 @@ for (model in models) {
 
 ---
 
+#### 4.3.1 Vérification de compatibilité profil ↔ offre
+
+Avant de lancer la réécriture du CV, le pipeline effectue un **contrôle de compatibilité** entre le profil détecté dans le CV et le poste ciblé. Ce contrôle utilise un second appel LLM dédié dans `OpenRouterService`.
+
+**Pourquoi ce contrôle ?**  
+Optimiser un CV de développeur junior pour un poste de CFO reviendrait à inventer une expérience fictive. Le contrôle permet d'éviter cela et de guider le candidat vers des offres réellement adaptées.
+
+**Nouveau DTO — `CompatibilityVerdict.java` :**
+```java
+public record CompatibilityVerdict(
+    boolean compatible,        // true → on continue ; false → état rejected
+    int     compatibilityScore,// 0–100 — proximité profil/offre
+    String  candidateProfile,  // résumé du profil détecté dans le CV ("Développeur Angular Junior")
+    String  targetProfile,     // résumé du poste ("Chief Financial Officer")
+    String  rejectionReason    // explication lisible si compatible = false
+) {}
+```
+
+**Flux côté backend (`OptimizationConsumer.java`) :**
+```
+[Message RabbitMQ reçu]
+        │
+        ▼
+OpenRouterService.checkCompatibility(cvText, jobDescription)
+        │
+        ├─ compatible = true  → continuer l'optimisation normale
+        │
+        └─ compatible = false → sauvegarder verdict + status = REJECTED
+                                 → WebSocket push (status: "rejected")
+```
+
+**Côté Angular — état `rejected` :**
+
+Le composant `/cv/optimize/:id` gère un quatrième état `rejected` (en plus de `processing`, `completed`, `failed`) :
+
+| Élément affiché | Description |
+|-----------------|-------------|
+| Icône `block` rouge | Optimisation impossible |
+| Bloc profil ↔ poste | Votre profil détecté à gauche → poste ciblé à droite |
+| Barre de compatibilité | Pourcentage de proximité sur une barre de progression |
+| Raison du rejet | Explication lisible fournie par le LLM |
+| CTA 1 | "Trouver des offres adaptées" → `/jobs` |
+| CTA 2 | "Retour au CV Manager" → `/cv` |
+
+L'historique du CV Manager affiche les optimisations rejetées avec un badge orange `Profil incompatible`.
+
+---
+
+#### 4.3.2 Scoring ATS job-aware (mots-clés matched / missing)
+
+Le score ATS initial de `AtsScorer.java` était calculé sur des critères génériques (sections présentes, verbes d'action, mots-clés tech). Il a été enrichi d'un **scoring contextuel** basé sur les mots-clés réels de l'offre.
+
+**Comment ça marche — nouvelle méthode `scoreAgainstJob()` dans `AtsScorer.java` :**
+
+1. `OptimizationConsumer` appelle `OpenRouterService.extractKeywords(jobDescription)` — le LLM retourne une liste de mots-clés techniques et compétences extraits de l'offre ciblée.
+2. `AtsScorer.scoreAgainstJob(cvText, keywords)` calcule combien de ces mots-clés apparaissent dans le texte du CV optimisé.
+3. Le score final (`optimizedScore`) pondère le score générique et le score job-aware.
+
+**Nouveaux champs dans `OptimizationResponse.java` :**
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `matchedKeywords` | `List<String>` | Mots-clés de l'offre couverts par le CV optimisé |
+| `missingKeywords` | `List<String>` | Mots-clés de l'offre encore absents du CV |
+
+**Côté Angular — section "Analyse ATS — mots-clés de l'offre" :**
+
+Affichée uniquement si au moins un mot-clé est présent dans `matchedKeywords` ou `missingKeywords` :
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  🔍 Analyse ATS — mots-clés de l'offre    12/15 couverts│
+│                                                         │
+│  ✅ Couverts                                            │
+│  [Angular] [TypeScript] [Spring Boot] [REST API] ...    │
+│                                                         │
+│  ○ Encore manquants                                     │
+│  [Kubernetes] [Terraform] [AWS]                         │
+│  Ces compétences apparaissent dans l'offre mais pas     │
+│  dans votre CV. Ne les ajoutez que si vous les         │
+│  possédez réellement.                                   │
+└─────────────────────────────────────────────────────────┘
+```
+
+- Chips verts remplis → mots-clés couverts (`matchedKeywords`)
+- Chips gris/outline → mots-clés manquants (`missingKeywords`)
+- Compteur `X/Y couverts` dans l'en-tête de la section
+
+---
+
+#### 4.3.3 Backoff/retry sur erreur 429 OpenRouter
+
+OpenRouter retourne HTTP **429 (Too Many Requests)** en cas de saturation du quota sur un modèle gratuit. Sans gestion, cela faisait passer le statut en `FAILED` même si un simple délai aurait suffi.
+
+**Logique ajoutée dans `OpenRouterService.java` :**
+
+```java
+// Attente exponentielle avant de retenter sur le même modèle
+for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+        return callModel(model, prompt);
+    } catch (RateLimitException e) {
+        if (attempt < MAX_RETRIES - 1) {
+            Thread.sleep(BACKOFF_BASE_MS * (1L << attempt)); // 2s, 4s, 8s…
+        }
+    }
+}
+// Si toujours en 429 après MAX_RETRIES → passer au modèle suivant dans la chaîne de fallback
+```
+
+La chaîne complète est donc : **Gemma 4 31B** (3 tentatives avec backoff) → **LLaMA 3.3 70B** (3 tentatives) → **Qwen3 80B** (3 tentatives). Si tous les modèles épuisent leurs tentatives, le statut passe en `FAILED` et un message clair est affiché : *"Réessayez dans quelques minutes"*.
+
+---
+
 ### 4.4 Pipeline RabbitMQ (traitement asynchrone)
+
+#### 4.4.1 Queue CV — optimisation IA
 
 **Ce qui a été ajouté :**
 - `RabbitMQConfig.java` — déclare l'exchange `cv.exchange`, la queue `cv.optimize.queue`, et une dead-letter queue `cv.optimize.dlq`
@@ -297,6 +419,65 @@ Sans précaution, RabbitMQ peut recevoir le message AVANT que PostgreSQL committ
 
 **Dead Letter Queue :**  
 Si le consumer échoue 3 fois (quota OpenRouter épuisé, timeout…), le message est automatiquement routé vers `cv.optimize.dlq` pour inspection manuelle (visible dans l'UI RabbitMQ : `http://localhost:15672`).
+
+---
+
+#### 4.4.2 Queues Scraping — 5 sources en parallèle + chaîne d'enrichissement
+
+Le pipeline de scraping a été migré vers RabbitMQ pour permettre aux **5 sources de scraper en parallèle** au lieu de séquentiellement, et pour **chaîner automatiquement l'enrichissement** après chaque source.
+
+**Nouveaux composants :**
+
+| Fichier | Rôle |
+|---------|------|
+| `ScrapeMessage.java` | Record Java — `(String source)` |
+| `ScrapeProducer.java` | Publie 5 messages dans `scrape.exchange` (un par source) |
+| `ScrapeConsumer.java` | `@RabbitListener` — route vers le bon scraper selon `source`, puis publie dans `enrich.exchange` |
+| `EnrichMessage.java` | Record Java — `(List<UUID> jobIds)` |
+| `EnrichProducer.java` | Publie les IDs des offres nouvellement sauvegardées dans `enrich.exchange` |
+| `EnrichConsumer.java` | `@RabbitListener` — appelle `JobEnrichmentService.enrichById(jobIds)` |
+
+**Échanges et queues déclarés dans `RabbitMQConfig.java` :**
+
+| Exchange | Queue | Utilisation |
+|----------|-------|------------|
+| `cv.exchange` | `cv.optimize.queue` + DLQ | Optimisation IA (existant) |
+| `scrape.exchange` | `scrape.queue` | Un message par source → scraping parallèle |
+| `enrich.exchange` | `enrich.queue` | IDs après scraping → enrichissement immédiat |
+
+**Nouveau flux `triggerScrape()` :**
+
+```
+POST /api/admin/scrape/trigger
+        │
+        ▼
+JobService.triggerScrape()
+        │
+        ├─ scrapeProducer.publish("rekrute.com")   ─┐
+        ├─ scrapeProducer.publish("emploi.ma")      │ 5 messages publiés
+        ├─ scrapeProducer.publish("indeed.ma")      │ instantanément
+        ├─ scrapeProducer.publish("linkedin.com")   │
+        └─ scrapeProducer.publish("marocemploi.net")┘
+                │
+                ▼ (retourne immédiatement — sans attendre)
+        {status: "triggered", sources: 5}
+
+        [En arrière-plan — 5 consumers s'exécutent en parallèle]
+        ScrapeConsumer → rekrute.com → sauvegarde → enrichProducer.publish(ids) → EnrichConsumer
+        ScrapeConsumer → emploi.ma   → sauvegarde → enrichProducer.publish(ids) → EnrichConsumer
+        ScrapeConsumer → indeed.ma   → sauvegarde → enrichProducer.publish(ids) → EnrichConsumer
+        ScrapeConsumer → linkedin.com→ sauvegarde → enrichProducer.publish(ids) → EnrichConsumer
+        ScrapeConsumer → marocemploi → sauvegarde (enriched inline, pas d'enrich message)
+```
+
+**Avantages vs l'approche séquentielle précédente :**
+
+| Critère | Avant (séquentiel) | Après (RabbitMQ parallèle) |
+|---------|---------------------|---------------------------|
+| Durée totale scraping | ~60–90s (5 sources en chaîne) | ~15–20s (source la plus lente) |
+| Enrichissement | Manuel — déclenché séparément | Automatique — chaîné après chaque source |
+| Erreur sur une source | Bloque les suivantes dans le même thread | Isolée — les 4 autres continuent |
+| Monitoring | Compteur retourné en fin de requête | Visible en temps réel dans l'UI RabbitMQ |
 
 ---
 
@@ -378,8 +559,11 @@ ngOnInit() {
 | Statut | Affichage | Lien |
 |--------|-----------|------|
 | `completed` | Score avant/après + gain en pts + nom du modèle | ✅ Cliquable → résultat complet |
+| `rejected` | Badge orange "Profil incompatible" + compatibilityScore% | ✅ Cliquable → page rejet (profil ↔ offre + raison) |
 | `failed` | Badge rouge "Échec" | ⚠️ Icône erreur (non cliquable) |
 | `processing` | Badge jaune "En cours…" | ⏳ Icône hourglass (non cliquable) |
+
+Le tableau a été redessiné pour afficher toutes les optimisations — y compris les rejets — avec leur statut coloré en ligne, permettant au candidat de comprendre pourquoi une tentative n'a pas abouti sans quitter le CV Manager.
 
 ---
 
@@ -436,7 +620,7 @@ Si le CV uploadé est mal parsé (texte brut non structuré), l'utilisateur peut
 | **Recherche offres** | `/jobs` | **RÉEL** — offres scrapées depuis rekrute.com + emploi.ma + Indeed + LinkedIn, pagination, filtres, barre admin |
 | **Détail offre** | `/jobs/:id` | **RÉEL** — description enrichie structurée, compétences, bouton "Optimiser CV" |
 | **Mon CV** | `/cv` | **RÉEL** — upload PDF, ATS réel, sections extraites, historique |
-| **Optimizer** | `/cv/optimize/:id` | **RÉEL** — loading IA animé, résultat Gemma 4, avant/après |
+| **Optimizer** | `/cv/optimize/:id` | **RÉEL** — loading IA animé (4 étapes), résultat Gemma 4 (avant/après, mots-clés ATS), état rejeté (profil incompatible), état échec |
 | **CV Studio** | `/cv/studio/:id` | **RÉEL** — template designer, photo, live preview, export PDF vectoriel |
 | Candidatures | `/applications` | Kanban (mock data) |
 | Notifications | `/notifications` | Mock data |
@@ -467,22 +651,34 @@ HireSync agrège automatiquement les offres d'emploi de **cinq job boards maroca
 
 **Orchestration — `JobService.triggerScrape()` :**
 
-Les cinq scrapers sont appelés séquentiellement et leurs compteurs additionnés. Le contrôleur ne parle qu'à `JobService` :
+`POST /api/admin/scrape/trigger` publie **cinq messages** dans la queue RabbitMQ `scrape.queue` (un par source) et retourne immédiatement. Les cinq sources scrapent ensuite **en parallèle** dans des threads consumers séparés. À la fin de chaque source, les IDs des offres nouvellement sauvegardées sont publiés dans `enrich.queue` pour déclencher automatiquement l'enrichissement (voir §4.4.2).
 
 ```java
-// JobService.java
+// JobService.java — nouvelle orchestration via RabbitMQ
 public ScrapeTriggerResponse triggerScrape() {
-    int saved = rekruteScraper.scrape()           // rekrute.com
-              + emploiMaScraper.scrape()           // emploi.ma
-              + indeedScraper.scrape()             // indeed.ma
-              + linkedInScraper.scrape()           // linkedin.com
-              + marocEmploiScraper.scrape();       // marocemploi.net
-    long total = jobRepository.count();
-    return new ScrapeTriggerResponse(saved, total);
+    List<String> sources = List.of(
+        "rekrute.com", "emploi.ma", "indeed.ma", "linkedin.com", "marocemploi.net"
+    );
+    sources.forEach(scrapeProducer::publish);   // 5 messages → scraping parallèle
+    return new ScrapeTriggerResponse(sources.size());
+}
+
+// ScrapeConsumer.java — route vers le bon scraper
+@RabbitListener(queues = "scrape.queue")
+public void consume(ScrapeMessage msg) {
+    List<UUID> savedIds = switch (msg.source()) {
+        case "rekrute.com"      -> rekruteScraper.scrape();
+        case "emploi.ma"        -> emploiMaScraper.scrape();
+        case "indeed.ma"        -> indeedScraper.scrape();
+        case "linkedin.com"     -> linkedInScraper.scrape();
+        case "marocemploi.net"  -> marocEmploiScraper.scrape();
+        default -> List.of();
+    };
+    if (!savedIds.isEmpty()) enrichProducer.publish(savedIds);   // → enrichissement auto
 }
 ```
 
-Un seul appel à `POST /api/admin/scrape/trigger` collecte donc les offres des **cinq sources** d'un coup. La déduplication par `sourceUrl` rend l'opération **idempotente** quelle que soit la source.
+Un seul appel à `POST /api/admin/scrape/trigger` collecte les offres des **cinq sources** en parallèle. La déduplication par `sourceUrl` rend l'opération **idempotente** quelle que soit la source.
 
 **Choix de conception communs (les 5 scrapers) :**
 
@@ -1477,13 +1673,15 @@ backend/src/main/java/ma/hiresync/
 │   │   └── CvOptimizationRepository.java    findByCvUserId, findByIdAndCvUserId
 │   ├── dto/                                 CvResponse, OptimizeRequest, OptimizationResponse…
 │   ├── service/
-│   │   ├── AtsScorer.java                   PDFBox extraction + scoring ATS (0–100)
-│   │   ├── OpenRouterService.java           Appel WebClient → OpenRouter (Gemma 4, fallbacks)
+│   │   ├── AtsScorer.java                   PDFBox extraction + scoring ATS générique + scoreAgainstJob() (mots-clés offre)
+│   │   ├── OpenRouterService.java           WebClient → OpenRouter (Gemma 4, fallbacks, backoff 429, checkCompatibility, extractKeywords)
 │   │   └── CvService.java                   Logique métier : upload, activate, delete, optimize
 │   ├── messaging/
 │   │   ├── OptimizationMessage.java         Record Java (optimizationId, cvId, userId, jobDesc)
 │   │   ├── OptimizationProducer.java        Publie dans cv.exchange après commit transaction
-│   │   └── OptimizationConsumer.java        @RabbitListener + @Transactional → appel OpenRouter
+│   │   └── OptimizationConsumer.java        @RabbitListener → checkCompatibility → extractKeywords → OpenRouter → AtsScorer
+│   ├── dto/
+│   │   └── CompatibilityVerdict.java        Record Java (compatible, compatibilityScore, candidateProfile, targetProfile, rejectionReason)
 │   └── controller/
 │       └── CvController.java                REST endpoints CV (upload, list, optimize, history)
 │
@@ -1492,8 +1690,15 @@ backend/src/main/java/ma/hiresync/
 │   ├── repository/JobRepository.java        search() JPQL paginé, existsBySourceUrl, findTop20ByEnrichedFalse
 │   ├── controller/JobController.java        GET /api/jobs, GET /api/jobs/{id}, POST /admin/scrape+enrich
 │   ├── dto/                                 JobResponse, ScrapeTriggerResponse, EnrichTriggerResponse
+│   ├── messaging/
+│   │   ├── ScrapeMessage.java               Record Java (source) — identifie la source à scraper
+│   │   ├── ScrapeProducer.java              Publie dans scrape.exchange (1 message par source)
+│   │   ├── ScrapeConsumer.java              @RabbitListener → route vers le bon scraper, puis publie dans enrich.exchange
+│   │   ├── EnrichMessage.java               Record Java (List<UUID> jobIds) — offres à enrichir
+│   │   ├── EnrichProducer.java              Publie dans enrich.exchange après scraping d'une source
+│   │   └── EnrichConsumer.java              @RabbitListener → appelle JobEnrichmentService.enrichById(jobIds)
 │   └── service/
-│       ├── JobService.java                  Orchestrateur — triggerScrape() additionne les 5 scrapers, mapping DTO
+│       ├── JobService.java                  Orchestrateur — triggerScrape() publie 5 messages RabbitMQ (parallèle), mapping DTO
 │       ├── JobScraperService.java           Jsoup → rekrute.com listing (3 pages × ~10 offres)
 │       ├── EmploiMaScraperService.java      Jsoup → emploi.ma listing (cartes card-job, 3 pages)
 │       ├── IndeedScraperService.java        Jsoup + Jackson → Indeed JSON embarqué (window.mosaic, 1 page)
@@ -1507,7 +1712,7 @@ backend/src/main/java/ma/hiresync/
 └── config/
     ├── SecurityConfig.java                  Spring Security (JWT, CORS, GET /api/jobs public)
     ├── WebSocketConfig.java                 STOMP sur SockJS (/ws/notifications)
-    └── RabbitMQConfig.java                  Exchange + Queue + DLQ + JSON converter
+    └── RabbitMQConfig.java                  cv.exchange + scrape.exchange + enrich.exchange + DLQ + JSON converter
 ```
 
 ---
