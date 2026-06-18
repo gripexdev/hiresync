@@ -149,3 +149,83 @@ $primary: #2E86AB; $accent: #17A589;
 
 @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+// ══ Status update + drag & drop (added) ════════════════════════════════════════════
+$primary: #2E86AB;
+
+// Empty state
+.apps-empty {
+  padding: 56px 40px; display: flex; flex-direction: column; align-items: center;
+  text-align: center; gap: 12px;
+  &__icon {
+    width: 72px; height: 72px; border-radius: 50%; background: rgba(46,134,171,.08);
+    display: flex; align-items: center; justify-content: center;
+    mat-icon { font-size: 36px; width: 36px; height: 36px; color: $primary; }
+  }
+  h2 { font-size: 19px; font-weight: 800; color: #1A202C; margin: 0; }
+  p  { font-size: 14px; color: #64748B; margin: 0 0 8px; max-width: 420px; line-height: 1.6; }
+  .hs-btn-primary { text-decoration: none; }
+}
+
+// Drop zone
+.kanban-column__body {
+  display: flex; flex-direction: column; gap: 10px;
+  min-height: 80px; border-radius: 10px; padding: 4px;
+  transition: background 0.15s;
+  &.cdk-drop-list-dragging { background: rgba(46,134,171,.04); }
+}
+.cdk-drop-list-receiving { background: rgba(46,134,171,.08) !important; outline: 2px dashed rgba(46,134,171,.35); outline-offset: -2px; }
+
+// Card tweaks for drag + menu
+.kanban-card {
+  position: relative; cursor: grab;
+  &:active { cursor: grabbing; }
+  &__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+  &__menu {
+    flex-shrink: 0; border: none; background: transparent; cursor: pointer;
+    color: #94A3B8; border-radius: 6px; padding: 2px; display: flex; margin: -2px -4px 0 0;
+    mat-icon { font-size: 18px; width: 18px; height: 18px; }
+    &:hover { background: #F1F5F9; color: #475569; }
+  }
+}
+
+// Drag visuals
+.cdk-drag-preview {
+  border-radius: 10px; box-shadow: 0 12px 28px -6px rgba(0,0,0,.28);
+  background: #fff;
+}
+.cdk-drag-placeholder { opacity: 0; }
+.kanban-card__placeholder {
+  height: 64px; border-radius: 10px;
+  background: rgba(46,134,171,.08); border: 2px dashed rgba(46,134,171,.35);
+}
+.cdk-drag-animating { transition: transform 200ms cubic-bezier(0,0,0.2,1); }
+
+// Menu items
+.menu-label { display: block; padding: 8px 14px 4px; font-size: 11px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: .04em; }
+.menu-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; }
+
+// Table row status button
+.row-status-btn {
+  border: 1px solid #E2E8F0; background: #fff; border-radius: 8px; cursor: pointer;
+  width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  color: $primary; transition: background 0.15s;
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+  &:hover { background: #F1F5F9; }
+}
+
+// Modal status pills
+.modal-status { margin-top: 6px; }
+.modal-status__label { display: block; font-size: 12px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 10px; }
+.status-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.status-pill {
+  padding: 7px 14px; border-radius: 9999px; cursor: pointer;
+  border: 1.5px solid #E2E8F0; background: #fff;
+  font-family: inherit; font-size: 13px; font-weight: 600; color: #64748B;
+  transition: all 0.15s;
+  &:hover:not(:disabled):not(.status-pill--active) { border-color: var(--pill-color); color: var(--pill-color); }
+  &--active {
+    background: var(--pill-color); border-color: var(--pill-color); color: #fff;
+  }
+  &:disabled { cursor: default; }
+}

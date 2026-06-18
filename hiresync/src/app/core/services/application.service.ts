@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Application, ApplicationStats, ApplyRequest } from '../models/application.model';
+import { Application, ApplicationStats, ApplyRequest, ApplicationStatus } from '../models/application.model';
 
 @Injectable({ providedIn: 'root' })
 export class ApplicationService {
@@ -33,5 +33,10 @@ export class ApplicationService {
   /** POST /api/applications/{jobId}/mark-applied — record the "Postuler" click (idempotent) */
   markApplied(jobId: string, cvId: string): Observable<Application> {
     return this.http.post<Application>(`${this.base}/${jobId}/mark-applied`, { cvId });
+  }
+
+  /** PATCH /api/applications/{id}/status — change an application's status */
+  updateStatus(id: string, status: ApplicationStatus): Observable<Application> {
+    return this.http.patch<Application>(`${this.base}/${id}/status`, { status });
   }
 }

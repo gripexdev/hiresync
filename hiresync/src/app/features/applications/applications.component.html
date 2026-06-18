@@ -2,7 +2,7 @@
   <div class="page-header__row">
     <div>
       <h1>Mes candidatures</h1>
-      <p>{{ all().length }} candidature(s) au total</p>
+      <p>{{ all().length }} candidature(s) au total · glissez une carte pour changer son statut</p>
     </div>
     <div class="view-toggle">
       <button [class.active]="view() === 'kanban'" (click)="view.set('kanban')">
@@ -17,9 +17,16 @@
 
 @if (loading()) {
   <div class="loading-center"><mat-spinner diameter="40" /></div>
+} @else if (all().length === 0) {
+  <div class="hs-card apps-empty">
+    <div class="apps-empty__icon"><mat-icon>work_outline</mat-icon></div>
+    <h2>Aucune candidature</h2>
+    <p>Optimisez votre CV pour une offre puis cliquez « Postuler » — la candidature apparaîtra ici.</p>
+    <a routerLink="/jobs" class="hs-btn-primary"><mat-icon>search</mat-icon> Parcourir les offres</a>
+  </div>
 } @else {
 
-  <!-- ── Kanban view ── -->
+  <!-- ── Kanban view (drag & drop) ── -->
   @if (view() === 'kanban') {
     <div class="kanban-board">
       @for (col of columns(); track col.id) {
@@ -30,28 +37,49 @@
             <span class="count">{{ col.apps.length }}</span>
           </div>
 
-          @for (app of col.apps; track app.id) {
-            <div class="kanban-card" (click)="selected.set(app)">
-              <div class="kanban-card__company">{{ app.company }}</div>
-              <div class="kanban-card__title">{{ app.jobTitle }}</div>
-              <div class="kanban-card__meta">
-                <span><mat-icon>location_on</mat-icon>{{ app.location }}</span>
-                @if (app.matchScore) {
-                  <span class="match-chip" [ngClass]="matchClass(app.matchScore)">{{ app.matchScore }}%</span>
-                }
-              </div>
-              @if (app.nextAction) {
-                <div class="kanban-card__action">
-                  <mat-icon>arrow_forward</mat-icon>{{ app.nextAction }}
-                </div>
-              }
-              <div class="kanban-card__date">{{ app.appliedAt | date:'dd/MM/yyyy' }}</div>
-            </div>
-          }
+          <div class="kanban-column__body"
+               [id]="'col-' + col.id"
+               cdkDropList
+               [cdkDropListData]="col.id"
+               [cdkDropListConnectedTo]="columnIds"
+               (cdkDropListDropped)="onDrop($event)">
 
-          @if (col.apps.length === 0) {
-            <div class="kanban-empty">Aucune candidature</div>
-          }
+            @for (app of col.apps; track app.id) {
+              <div class="kanban-card" cdkDrag [cdkDragData]="app" (click)="selected.set(app)">
+                <div class="kanban-card__top">
+                  <div class="kanban-card__company">{{ app.company }}</div>
+                  <button class="kanban-card__menu" (click)="$event.stopPropagation()"
+                          [matMenuTriggerFor]="menu" matTooltip="Changer le statut">
+                    <mat-icon>more_vert</mat-icon>
+                  </button>
+                  <mat-menu #menu="matMenu">
+                    <span class="menu-label">Déplacer vers</span>
+                    @for (opt of statusOptions; track opt.id) {
+                      <button mat-menu-item [disabled]="opt.id === app.status" (click)="changeStatus(app, opt.id)">
+                        <span class="menu-dot" [style.background]="opt.color"></span>{{ opt.label }}
+                      </button>
+                    }
+                  </mat-menu>
+                </div>
+
+                <div class="kanban-card__title">{{ app.jobTitle }}</div>
+                <div class="kanban-card__meta">
+                  <span><mat-icon>location_on</mat-icon>{{ app.location }}</span>
+                  @if (app.matchScore) {
+                    <span class="match-chip" [ngClass]="matchClass(app.matchScore)">{{ app.matchScore }}%</span>
+                  }
+                </div>
+                <div class="kanban-card__date">{{ app.appliedAt | date:'dd/MM/yyyy' }}</div>
+
+                <!-- preview shown while dragging -->
+                <div class="kanban-card__placeholder" *cdkDragPlaceholder></div>
+              </div>
+            }
+
+            @if (col.apps.length === 0) {
+              <div class="kanban-empty">Déposez ici</div>
+            }
+          </div>
         </div>
       }
     </div>
@@ -69,23 +97,35 @@
             <th>Date</th>
             <th>Match</th>
             <th>Statut</th>
-            <th>Prochaine étape</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
           @for (app of all(); track app.id) {
-            <tr (click)="selected.set(app)" class="table-row">
-              <td class="td-title">{{ app.jobTitle }}</td>
-              <td>{{ app.company }}</td>
-              <td>{{ app.location }}</td>
-              <td>{{ app.appliedAt | date:'dd/MM' }}</td>
-              <td>
+            <tr class="table-row">
+              <td class="td-title" (click)="selected.set(app)">{{ app.jobTitle }}</td>
+              <td (click)="selected.set(app)">{{ app.company }}</td>
+              <td (click)="selected.set(app)">{{ app.location }}</td>
+              <td (click)="selected.set(app)">{{ app.appliedAt | date:'dd/MM' }}</td>
+              <td (click)="selected.set(app)">
                 @if (app.matchScore) {
                   <span class="match-chip" [ngClass]="matchClass(app.matchScore)">{{ app.matchScore }}%</span>
                 }
               </td>
               <td><app-status-badge [status]="app.status" /></td>
-              <td class="td-action">{{ app.nextAction ?? '—' }}</td>
+              <td class="td-action">
+                <button class="row-status-btn" [matMenuTriggerFor]="rowMenu" matTooltip="Changer le statut">
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <mat-menu #rowMenu="matMenu">
+                  <span class="menu-label">Changer le statut</span>
+                  @for (opt of statusOptions; track opt.id) {
+                    <button mat-menu-item [disabled]="opt.id === app.status" (click)="changeStatus(app, opt.id)">
+                      <span class="menu-dot" [style.background]="opt.color"></span>{{ opt.label }}
+                    </button>
+                  }
+                </mat-menu>
+              </td>
             </tr>
           }
         </tbody>
@@ -107,20 +147,32 @@
       </div>
       <div class="modal-body">
         <div class="modal-row"><mat-icon>calendar_today</mat-icon><span>Candidaté le {{ app.appliedAt | date:'dd/MM/yyyy' }}</span></div>
-        <div class="modal-row"><mat-icon>flag</mat-icon><span><app-status-badge [status]="app.status" /></span></div>
+        @if (app.cvFileName) {
+          <div class="modal-row"><mat-icon>description</mat-icon><span>CV envoyé : <strong>{{ app.cvFileName }}</strong></span></div>
+        }
         @if (app.matchScore) {
           <div class="modal-row"><mat-icon>hub</mat-icon><span>Compatibilité : <strong>{{ app.matchScore }}%</strong></span></div>
         }
-        @if (app.nextAction) {
-          <div class="modal-row"><mat-icon>arrow_forward</mat-icon><span>{{ app.nextAction }}</span></div>
-        }
+
+        <!-- Status selector -->
+        <div class="modal-status">
+          <span class="modal-status__label">Statut de la candidature</span>
+          <div class="status-pills">
+            @for (opt of statusOptions; track opt.id) {
+              <button class="status-pill"
+                      [class.status-pill--active]="app.status === opt.id"
+                      [style.--pill-color]="opt.color"
+                      [disabled]="updating() === app.id"
+                      (click)="changeStatus(app, opt.id)">
+                {{ opt.label }}
+              </button>
+            }
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <a [routerLink]="'/jobs/' + app.jobId" class="hs-btn-secondary modal-btn" (click)="selected.set(null)">
           <mat-icon>open_in_new</mat-icon> Voir l'offre
-        </a>
-        <a routerLink="/cv/optimize/opt1" class="hs-btn-accent modal-btn" (click)="selected.set(null)">
-          <mat-icon>auto_awesome</mat-icon> Optimiser CV
         </a>
       </div>
     </div>

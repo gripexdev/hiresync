@@ -91,6 +91,25 @@ public class ApplicationService {
         return ApplicationResponse.from(application);
     }
 
+    /** Update the status of one of the user's applications (kanban move / manual change). */
+    public ApplicationResponse updateStatus(UUID userId, UUID applicationId, String statusRaw) {
+        var application = appRepo.findByIdAndUserId(applicationId, userId)
+            .orElseThrow(() -> new RuntimeException("Candidature introuvable (not found)"));
+
+        ApplicationStatus newStatus;
+        try {
+            newStatus = ApplicationStatus.valueOf(statusRaw == null ? "" : statusRaw.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Statut invalide : " + statusRaw);
+        }
+
+        application.setStatus(newStatus);
+        application.setUpdatedAt(Instant.now());
+        appRepo.save(application);
+        log.info("User {} updated application {} → status {}", userId, applicationId, newStatus);
+        return ApplicationResponse.from(application);
+    }
+
     @Transactional(readOnly = true)
     public List<ApplicationResponse> getMyApplications(UUID userId) {
         return appRepo.findByUserIdOrderByAppliedAtDesc(userId)

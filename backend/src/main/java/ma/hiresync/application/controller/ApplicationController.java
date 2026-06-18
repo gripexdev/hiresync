@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import ma.hiresync.application.dto.ApplicationResponse;
 import ma.hiresync.application.dto.ApplicationStatsResponse;
 import ma.hiresync.application.dto.ApplyRequest;
+import ma.hiresync.application.dto.UpdateStatusRequest;
 import ma.hiresync.application.service.ApplicationService;
 import ma.hiresync.auth.service.JwtService;
 import org.springframework.http.HttpStatus;
@@ -45,6 +46,16 @@ public class ApplicationController {
             @RequestHeader("Authorization") String authHeader) {
         UUID userId = extractUserId(authHeader);
         return ResponseEntity.ok(applicationService.markApplied(userId, jobId, req.cvId()));
+    }
+
+    /** PATCH /api/applications/{id}/status — change an application's status. */
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<ApplicationResponse> updateStatus(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateStatusRequest req,
+            @RequestHeader("Authorization") String authHeader) {
+        UUID userId = extractUserId(authHeader);
+        return ResponseEntity.ok(applicationService.updateStatus(userId, id, req.status()));
     }
 
     /** GET /api/applications — the current user's applications. */
