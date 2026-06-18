@@ -1,5 +1,10 @@
 package ma.hiresync.cv.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ma.hiresync.auth.repository.UserRepository;
@@ -14,7 +19,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import java.io.IOException;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -33,6 +37,7 @@ public class CvService {
     private final OptimizationProducer     producer;
     private final CvPdfGenerator           pdfGenerator;
     private final CvTextParser             cvTextParser;
+    private final ObjectMapper             objectMapper;
 
     @Value("${hiresync.cv.upload-dir}")
     private String uploadDir;
@@ -225,6 +230,114 @@ public class CvService {
             .orElseThrow(() -> new RuntimeException("CV not found"));
 
         return pdfGenerator.generate(cv, optim);
+    }
+
+    // ── PATCH /api/cv/optimize/{id}/boost-keywords ────────────────────────────
+    /**
+     * Inject the user-selected missing keywords into the optimized CV's skills
+     * (and coreCompetencies if there is room), then re-run ATS scoring and
+     * persist the updated result.
+     */
+    public OptimizationResponse boostKeywords(UUID optimId, UUID userId, List<String> keywords) {
+        var optim = optimRepo.findByIdAndCvUserId(optimId, userId)
+            .orElseThrow(() -> new RuntimeException("Optimization not found"));
+
+        if (optim.getStatus() != CvOptimization.OptimizationStatus.COMPLETED)
+            throw new IllegalStateException("Keyword boost is only available on completed optimizations");
+
+        if (keywords == null || keywords.isEmpty())
+            return OptimizationResponse.from(optim, parseChanges(optim.getSuggestedChangesJson()));
+
+        // 1. Parse the stored optimized CV JSON
+        String rawJson = optim.getOptimizedCvJson();
+        if (rawJson == null || rawJson.isBlank())
+            throw new IllegalStateException("CV data not available for this optimization — it may pre-date structured output.");
+
+        ObjectNode cvNode;
+        try {
+            JsonNode parsed = objectMapper.readTree(rawJson);
+            if (!parsed.isObject())
+                throw new IllegalStateException("Optimized CV JSON is not an object");
+            cvNode = (ObjectNode) parsed;
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Could not parse optimized CV: " + e.getMessage());
+        }
+
+        // 2. Add keywords to the skills array (case-insensitive dedup)
+        Set<String> seenSkills = new HashSet<>();
+        ArrayNode skillsArray  = objectMapper.createArrayNode();
+        JsonNode  skillsNode   = cvNode.path("skills");
+        if (skillsNode.isArray()) {
+            skillsNode.forEach(n -> { skillsArray.add(n); seenSkills.add(n.asText("").toLowerCase()); });
+        }
+        for (String kw : keywords) {
+            if (kw != null && !kw.isBlank() && seenSkills.add(kw.toLowerCase())) {
+                skillsArray.add(kw);
+            }
+        }
+        cvNode.set("skills", skillsArray);
+
+        // 3. Mirror the top keywords into coreCompetencies (max 2 additions, cap at 12 total)
+        JsonNode coreNode = cvNode.path("coreCompetencies");
+        if (coreNode.isArray()) {
+            ArrayNode coreArray = (ArrayNode) coreNode;
+            Set<String> seenCore = new HashSet<>();
+            coreNode.forEach(n -> seenCore.add(n.asText("").toLowerCase()));
+            int added = 0;
+            for (String kw : keywords) {
+                if (added >= 2 || coreArray.size() >= 12) break;
+                if (kw != null && !kw.isBlank() && seenCore.add(kw.toLowerCase())) {
+                    coreArray.add(kw);
+                    added++;
+                }
+            }
+        }
+
+        // 4. Persist updated JSON
+        try {
+            optim.setOptimizedCvJson(objectMapper.writeValueAsString(cvNode));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize updated CV JSON");
+        }
+
+        // 5. Reconstruct the full ATS keyword list (matched + missing = all job keywords)
+        List<String> allKeywords = new ArrayList<>();
+        allKeywords.addAll(parseJsonStringList(optim.getMatchedKeywordsJson()));
+        allKeywords.addAll(parseJsonStringList(optim.getMissingKeywordsJson()));
+
+        // 6. Flatten the updated CV JSON → plain text and re-score
+        StringBuilder flat = new StringBuilder();
+        collectNodeText(cvNode, flat);
+        AtsScorer.JobMatch match = atsScorer.computeJobMatch(flat.toString(), allKeywords);
+
+        optim.setOptimizedScore(match.score());
+        optim.setMatchedKeywordsJson(toJsonString(match.matched()));
+        optim.setMissingKeywordsJson(toJsonString(match.missing()));
+        optimRepo.save(optim);
+
+        log.info("Keyword boost for optimization {} — {} added, score {}%→{}%",
+            optimId, keywords.size(), optim.getOriginalScore(), match.score());
+
+        return OptimizationResponse.from(optim, parseChanges(optim.getSuggestedChangesJson()));
+    }
+
+    private List<String> parseJsonStringList(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try { return objectMapper.readValue(json, new TypeReference<List<String>>() {}); }
+        catch (Exception e) { return List.of(); }
+    }
+
+    private String toJsonString(List<String> items) {
+        try { return objectMapper.writeValueAsString(items); }
+        catch (Exception e) { return "[]"; }
+    }
+
+    private void collectNodeText(JsonNode node, StringBuilder sb) {
+        if (node == null) return;
+        if (node.isValueNode()) { sb.append(node.asText()).append(' '); return; }
+        node.forEach(child -> collectNodeText(child, sb));
     }
 
     /**

@@ -329,8 +329,69 @@ $primary: #2E86AB; $accent: #17A589;
 }
 
 .kw-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+
 .kw-chip {
   padding: 4px 11px; border-radius: 9999px; font-size: 12px; font-weight: 600;
-  &--ok   { background: #D1FAE5; color: #065F46; }
-  &--miss { background: #F1F5F9; color: #64748B; border: 1px dashed #CBD5E1; }
+  display: inline-flex; align-items: center; gap: 4px;
+
+  &--ok { background: #D1FAE5; color: #065F46; }
+
+  // Missing keyword chip — rendered as <button>, needs base reset
+  &--miss {
+    background: #F1F5F9; color: #64748B;
+    border: 1px dashed #CBD5E1;
+    cursor: pointer; font-family: inherit;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    outline-offset: 2px;
+
+    mat-icon { font-size: 14px; width: 14px; height: 14px; flex-shrink: 0; }
+
+    &:hover:not(.kw-chip--selected):not(:disabled) {
+      background: rgba(46,134,171,.09);
+      border-color: $primary;
+      color: $primary;
+    }
+  }
+
+  // Selected state (user picked this keyword to add)
+  &--selected {
+    background: rgba(23,165,137,.13) !important;
+    border: 1px solid $accent !important;
+    color: $accent !important;
+    font-weight: 700;
+    mat-icon { color: $accent; }
+  }
+}
+
+// Hint line above the missing chips
+.kw-boost-hint {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: #94A3B8; font-style: italic; margin: 0;
+  mat-icon { font-size: 15px; width: 15px; height: 15px; flex-shrink: 0; }
+}
+
+// Action bar that appears when keywords are selected
+.kw-boost-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 16px; border-radius: 10px;
+  background: rgba(23,165,137,.06); border: 1px solid rgba(23,165,137,.28);
+  flex-wrap: wrap;
+  animation: boost-bar-in 0.18s ease;
+
+  &__info {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: #1E293B;
+    mat-icon { font-size: 18px; width: 18px; height: 18px; color: $accent; }
+    strong { color: $accent; }
+  }
+}
+
+.kw-boost-btn {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+}
+
+@keyframes boost-bar-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

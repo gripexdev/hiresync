@@ -26,7 +26,32 @@ export class AuthService {
   readonly token      = this._token.asReadonly();
   readonly isLoggedIn = computed(() => !!this._token());
 
-  constructor(private http: HttpClient, private router: Router) {}
+  constructor(private http: HttpClient, private router: Router) {
+    // Clear any stale expired token immediately so the app never appears
+    // "logged in" with a token the backend will reject.
+    if (this._token() && this.isTokenExpired()) {
+      this._clearSession();
+    }
+  }
+
+  /** Returns true if the stored JWT has passed its exp claim. */
+  isTokenExpired(): boolean {
+    const token = this._token();
+    if (!token) return true;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return Date.now() >= payload.exp * 1000;
+    } catch {
+      return true;
+    }
+  }
+
+  private _clearSession(): void {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    this._user.set(null);
+    this._token.set(null);
+  }
 
   login(req: LoginRequest): Observable<AuthResponse> {
     return this.http.post<BackendAuthResponse>(`${environment.apiUrl}/auth/login`, req).pipe(
@@ -43,10 +68,7 @@ export class AuthService {
   }
 
   logout(): void {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    this._user.set(null);
-    this._token.set(null);
+    this._clearSession();
     this.router.navigate(['/login']);
   }
 

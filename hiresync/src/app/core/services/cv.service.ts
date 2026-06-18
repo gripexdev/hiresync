@@ -165,6 +165,18 @@ export class CvService {
     );
   }
 
+  // ── PATCH /api/cv/optimize/{id}/boost-keywords ───────────────────────────
+  /**
+   * Inject user-selected missing keywords into the optimized CV skills,
+   * re-score server-side, and return the updated result.
+   */
+  boostKeywords(optimId: string, keywords: string[]): Observable<CVOptimizationResult> {
+    return this.http.patch<CVOptimizationResult>(
+      `${this.base}/optimize/${optimId}/boost-keywords`,
+      { keywords }
+    );
+  }
+
   // ── GET /api/cv/structured/{id} — structured CV for the Studio ───────────────
   getStructuredCv(optimizationId: string): Observable<StructuredCv> {
     return this.http.get<StructuredCv>(`${this.base}/structured/${optimizationId}`);

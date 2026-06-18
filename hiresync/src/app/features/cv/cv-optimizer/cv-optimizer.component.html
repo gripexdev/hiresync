@@ -223,14 +223,51 @@
 
         @if ((r.missingKeywords?.length ?? 0) > 0) {
           <div class="kw-group">
-            <span class="kw-group__label kw-group__label--miss"><mat-icon>radio_button_unchecked</mat-icon> Encore manquants</span>
+            <span class="kw-group__label kw-group__label--miss">
+              <mat-icon>radio_button_unchecked</mat-icon> Encore manquants
+            </span>
+
+            <p class="kw-boost-hint">
+              <mat-icon>touch_app</mat-icon>
+              Sélectionnez les mots-clés que vous possédez réellement pour les ajouter à votre CV et augmenter votre score ATS.
+            </p>
+
             <div class="kw-chips">
               @for (kw of r.missingKeywords; track kw) {
-                <span class="kw-chip kw-chip--miss">{{ kw }}</span>
+                <button class="kw-chip kw-chip--miss"
+                        [class.kw-chip--selected]="isSelected(kw)"
+                        (click)="toggleKeyword(kw)"
+                        type="button">
+                  <mat-icon>{{ isSelected(kw) ? 'check' : 'add' }}</mat-icon>
+                  {{ kw }}
+                </button>
               }
             </div>
+
+            <!-- Boost bar — slides in when at least one keyword is selected -->
+            @if (selectedMissing().size > 0) {
+              <div class="kw-boost-bar">
+                <div class="kw-boost-bar__info">
+                  <mat-icon>rocket_launch</mat-icon>
+                  <span><strong>{{ selectedMissing().size }}</strong> mot(s)-clé(s) sélectionné(s)</span>
+                </div>
+                <button class="hs-btn-primary kw-boost-btn"
+                        type="button"
+                        (click)="applyKeywords()"
+                        [disabled]="boosting()">
+                  @if (boosting()) {
+                    <mat-spinner diameter="16" />
+                    <span>Mise à jour…</span>
+                  } @else {
+                    <mat-icon>add_circle</mat-icon>
+                    <span>Ajouter au CV</span>
+                  }
+                </button>
+              </div>
+            }
+
             <p class="kw-group__note">
-              Ces compétences apparaissent dans l'offre mais pas dans votre CV. Ne les ajoutez que si vous les possédez réellement.
+              Ne sélectionnez que les compétences que vous maîtrisez réellement.
             </p>
           </div>
         }

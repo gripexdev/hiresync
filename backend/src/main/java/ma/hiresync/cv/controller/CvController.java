@@ -85,6 +85,20 @@ public class CvController {
         return ResponseEntity.ok(cvService.getOptimization(id, userId));
     }
 
+    /**
+     * PATCH /api/cv/optimize/{id}/boost-keywords
+     * Inject user-selected missing keywords into the optimized CV skills,
+     * re-run ATS scoring, and return the updated result.
+     */
+    @PatchMapping("/optimize/{id}/boost-keywords")
+    public ResponseEntity<OptimizationResponse> boostKeywords(
+            @PathVariable UUID id,
+            @RequestBody BoostKeywordsRequest req,
+            @RequestHeader("Authorization") String authHeader) {
+        UUID userId = extractUserId(authHeader);
+        return ResponseEntity.ok(cvService.boostKeywords(id, userId, req.keywords()));
+    }
+
     /** GET /api/cv/optimization-history */
     @GetMapping("/optimization-history")
     public ResponseEntity<List<OptimizationResponse>> getHistory(

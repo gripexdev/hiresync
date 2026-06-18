@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Subject, takeUntil } from 'rxjs';
 import { CvService } from '../../../core/services/cv.service';
 import { WebSocketService } from '../../../core/services/websocket.service';
@@ -34,11 +35,13 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
   private cancel$  = new Subject<void>();
 
   downloading = signal(false);
+  boosting    = signal(false);
 
   // ── State ────────────────────────────────────────────────────────────────────
-  result         = signal<CVOptimizationResult | null>(null);
-  status         = signal<OptimizationStatus>('queued');
-  activeProvider = signal('');   // set from WebSocket event when optimization completes
+  result          = signal<CVOptimizationResult | null>(null);
+  status          = signal<OptimizationStatus>('queued');
+  activeProvider  = signal('');
+  selectedMissing = signal<Set<string>>(new Set());
   steps          = signal<ProcessStep[]>([
     { label: 'Vérification de la compatibilité profil ↔ offre', status: 'pending' },
     { label: 'Analyse de l\'offre et extraction des mots-clés ATS', status: 'pending' },
@@ -222,6 +225,45 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
     if (score >= 80) return '#10B981';
     if (score >= 60) return '#F59E0B';
     return '#EF4444';
+  }
+
+  // ── Keyword boost ─────────────────────────────────────────────────────────────
+  toggleKeyword(kw: string): void {
+    this.selectedMissing.update(set => {
+      const next = new Set(set);
+      if (next.has(kw)) next.delete(kw); else next.add(kw);
+      return next;
+    });
+  }
+
+  isSelected(kw: string): boolean { return this.selectedMissing().has(kw); }
+
+  applyKeywords(): void {
+    const keywords = [...this.selectedMissing()];
+    if (!keywords.length || this.boosting()) return;
+    this.boosting.set(true);
+    this.cvSvc.boostKeywords(this.id, keywords).pipe(
+      takeUntil(this.destroy$),
+    ).subscribe({
+      next: r => {
+        this.result.set(r);
+        this.selectedMissing.set(new Set());
+        this.boosting.set(false);
+        this.snack.open(
+          `${keywords.length} mot(s)-clé(s) ajouté(s) au CV — nouveau score : ${r.optimizedScore}%`,
+          'OK', { duration: 4500 }
+        );
+      },
+      error: (err: HttpErrorResponse) => {
+        this.boosting.set(false);
+        const msg = err.status === 401 || err.status === 403
+          ? 'Session expirée — reconnectez-vous puis réessayez.'
+          : err.status === 404
+            ? 'Optimisation introuvable (404).'
+            : `Erreur ${err.status || 'réseau'} — réessayez dans quelques secondes.`;
+        this.snack.open(msg, 'OK', { duration: 5000 });
+      },
+    });
   }
 
   // ── Download ─────────────────────────────────────────────────────────────────

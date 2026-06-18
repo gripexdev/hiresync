@@ -41,6 +41,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // Allow the error dispatch through — otherwise any controller
+                        // exception is re-dispatched to /error, re-enters this stateless
+                        // chain with an empty context, and gets masked as a 403 (which the
+                        // frontend then mistakes for an expired session).
+                        .requestMatchers("/error").permitAll()
                         // Job listings are public — anyone can browse without logging in
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/jobs", "/api/jobs/**").permitAll()
                         .anyRequest().authenticated()
