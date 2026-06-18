@@ -33,13 +33,12 @@
           </div>
 
           <div class="detail-header__actions">
-            <button class="hs-btn-primary" (click)="apply()" [disabled]="applying()">
-              @if (applying()) { <mat-spinner diameter="16" /> } @else { <mat-icon>send</mat-icon> }
-              {{ applying() ? 'Envoi…' : 'Postuler maintenant' }}
-            </button>
-            <button class="hs-btn-accent" (click)="optimizeCV()" [disabled]="optimizing()">
+            <button class="hs-btn-primary" (click)="optimizeCV()" [disabled]="optimizing()">
               @if (optimizing()) { <mat-spinner diameter="16" /> } @else { <mat-icon>auto_awesome</mat-icon> }
-              {{ optimizing() ? 'Optimisation…' : 'Optimiser mon CV pour ce poste' }}
+              {{ optimizing() ? 'Optimisation…' : 'Optimiser mon CV & postuler' }}
+            </button>
+            <button class="hs-btn-secondary" (click)="openJobSource()">
+              <mat-icon>open_in_new</mat-icon> Voir l'offre originale
             </button>
           </div>
         </div>

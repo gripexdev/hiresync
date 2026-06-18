@@ -1,0 +1,91 @@
+<div class="apply-dialog">
+  <!-- Header -->
+  <div class="apply-head">
+    <div class="apply-head__icon"><mat-icon>send</mat-icon></div>
+    <div class="apply-head__text">
+      <h2>Postuler à cette offre</h2>
+      <p>{{ data.jobTitle }}<span *ngIf="data.company"> · {{ data.company }}</span></p>
+    </div>
+    <button class="apply-close" (click)="cancel()" type="button" aria-label="Fermer">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <div class="apply-body">
+    <!-- Step 1: choose CV -->
+    <div class="apply-section__label">
+      <span class="step-num">1</span> Choisissez le CV à envoyer
+    </div>
+
+    @if (loading()) {
+      <div class="apply-loading"><mat-spinner diameter="28" /></div>
+    } @else if (cvs().length === 0) {
+      <div class="apply-no-cv">
+        <mat-icon>description</mat-icon>
+        <p>Vous n'avez aucun CV. Uploadez-en un dans <strong>Mon CV</strong> avant de postuler.</p>
+      </div>
+    } @else {
+      <div class="cv-picker">
+        @for (cv of cvs(); track cv.id) {
+          <button class="cv-option"
+                  [class.cv-option--selected]="isSelected(cv)"
+                  (click)="select(cv)"
+                  type="button">
+            <div class="cv-option__radio">
+              <mat-icon>{{ isSelected(cv) ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
+            </div>
+            <div class="cv-option__file"><mat-icon>picture_as_pdf</mat-icon></div>
+            <div class="cv-option__info">
+              <span class="cv-option__name">{{ cv.fileName }}</span>
+              <span class="cv-option__meta">
+                {{ cv.uploadedAt | date:'dd MMM yyyy' }}
+                @if (cv.fileSize) { · {{ formatSize(cv.fileSize) }} }
+                @if (cv.isActive) { <span class="cv-option__active">· CV actif</span> }
+              </span>
+            </div>
+            @if (cv.atsScore > 0) {
+              <span class="cv-option__score" [style.color]="scoreColor(cv.atsScore)">
+                {{ cv.atsScore }}<small>ATS</small>
+              </span>
+            }
+          </button>
+        }
+      </div>
+
+      <!-- Step 2: optional cover note -->
+      <div class="apply-section__label apply-section__label--mt">
+        <span class="step-num">2</span> Message de motivation <em>(optionnel)</em>
+      </div>
+      <textarea class="apply-note"
+                rows="4"
+                [value]="coverNote()"
+                (input)="onNote($any($event.target).value)"
+                placeholder="Quelques lignes pour vous présenter au recruteur…"></textarea>
+      <div class="apply-note__count">{{ coverNote().length }} / {{ maxNote }}</div>
+    }
+
+    @if (error()) {
+      <div class="apply-error">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ error() }}</span>
+      </div>
+    }
+  </div>
+
+  <!-- Footer -->
+  <div class="apply-actions">
+    <button class="hs-btn-secondary" (click)="cancel()" type="button" [disabled]="submitting()">
+      Annuler
+    </button>
+    <button class="hs-btn-primary"
+            (click)="submit()"
+            type="button"
+            [disabled]="submitting() || loading() || !selectedId()">
+      @if (submitting()) {
+        <mat-spinner diameter="16" /> Envoi…
+      } @else {
+        <mat-icon>send</mat-icon> Envoyer ma candidature
+      }
+    </button>
+  </div>
+</div>

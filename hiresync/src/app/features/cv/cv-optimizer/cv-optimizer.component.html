@@ -196,6 +196,109 @@
       </div>
     </div>
 
+    <!-- ══════════════════════════════════════════════════════════════════════
+         CANDIDATURE KIT — prepare everything, then apply on the company's site
+    ═══════════════════════════════════════════════════════════════════════════ -->
+    <div class="hs-card kit-card">
+      <div class="kit-head">
+        <div class="kit-head__icon"><mat-icon>workspace_premium</mat-icon></div>
+        <div class="kit-head__text">
+          <h2>Votre candidature est prête</h2>
+          <p>Récupérez votre CV optimisé et votre lettre, puis postulez sur le site de l'entreprise.</p>
+        </div>
+      </div>
+
+      <div class="kit-steps">
+        <!-- Step 1 — optimized CV -->
+        <div class="kit-step">
+          <div class="kit-step__top">
+            <span class="kit-step__num">1</span>
+            <div class="kit-step__title"><mat-icon>description</mat-icon> CV optimisé</div>
+          </div>
+          <p class="kit-step__desc">Téléchargez votre CV adapté à cette offre, ou personnalisez-le dans le Studio.</p>
+          <div class="kit-step__actions">
+            <a [routerLink]="'/cv/studio/' + id" class="hs-btn-primary kit-btn">
+              <mat-icon>auto_awesome</mat-icon> CV Studio
+            </a>
+            <button class="hs-btn-secondary kit-btn" (click)="download()" [disabled]="downloading()">
+              @if (downloading()) { <mat-spinner diameter="14" /> } @else { <mat-icon>download</mat-icon> }
+              PDF simple
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2 — cover letter / email -->
+        <div class="kit-step">
+          <div class="kit-step__top">
+            <span class="kit-step__num">2</span>
+            <div class="kit-step__title"><mat-icon>mail</mat-icon> Lettre de motivation</div>
+          </div>
+          <p class="kit-step__desc">Un email de candidature généré par l'IA à partir de votre CV et de l'offre.</p>
+
+          @if (!coverLetter()) {
+            <div class="kit-step__actions">
+              <button class="hs-btn-accent kit-btn" (click)="generateLetter()" [disabled]="generatingLetter()">
+                @if (generatingLetter()) {
+                  <mat-spinner diameter="14" /> Génération…
+                } @else {
+                  <mat-icon>{{ r.coverLetterReady ? 'visibility' : 'auto_fix_high' }}</mat-icon>
+                  {{ r.coverLetterReady ? 'Voir la lettre' : 'Générer la lettre' }}
+                }
+              </button>
+            </div>
+            @if (letterError()) {
+              <div class="kit-error"><mat-icon>error_outline</mat-icon> {{ letterError() }}</div>
+            }
+          }
+        </div>
+
+        <!-- Step 3 — apply on company site -->
+        <div class="kit-step">
+          <div class="kit-step__top">
+            <span class="kit-step__num">3</span>
+            <div class="kit-step__title"><mat-icon>send</mat-icon> Postuler</div>
+          </div>
+          <p class="kit-step__desc">Rendez-vous sur l'offre originale et postulez avec ce que vous venez de préparer.</p>
+          <div class="kit-step__actions">
+            @if (r.jobUrl) {
+              <button class="hs-btn-primary kit-btn" (click)="openJob()">
+                <mat-icon>open_in_new</mat-icon> Postuler sur le site
+              </button>
+            } @else {
+              <span class="kit-nolink"><mat-icon>info</mat-icon> Lien de l'offre indisponible</span>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Generated letter preview -->
+      @if (coverLetter(); as letter) {
+        <div class="letter-box">
+          <div class="letter-row">
+            <span class="letter-label">Objet</span>
+            <div class="letter-subject">{{ letter.subject }}</div>
+            <button class="letter-copy" (click)="copy('subject')" matTooltip="Copier l'objet">
+              <mat-icon>{{ copiedField() === 'subject' ? 'check' : 'content_copy' }}</mat-icon>
+            </button>
+          </div>
+          <div class="letter-body-wrap">
+            <span class="letter-label">Message</span>
+            <pre class="letter-body">{{ letter.body }}</pre>
+          </div>
+          <div class="letter-actions">
+            <button class="hs-btn-primary kit-btn" (click)="copyAll()">
+              <mat-icon>content_copy</mat-icon> Copier la lettre
+            </button>
+            <button class="hs-btn-secondary kit-btn" (click)="generateLetter(true)" [disabled]="generatingLetter()">
+              @if (generatingLetter()) { <mat-spinner diameter="14" /> } @else { <mat-icon>refresh</mat-icon> }
+              Régénérer
+            </button>
+            @if (letter.provider) { <span class="letter-provider">Généré par {{ letter.provider }}</span> }
+          </div>
+        </div>
+      }
+    </div>
+
     <!-- ATS keyword analysis -->
     @if ((r.matchedKeywords?.length ?? 0) + (r.missingKeywords?.length ?? 0) > 0) {
       <div class="hs-card ats-card">

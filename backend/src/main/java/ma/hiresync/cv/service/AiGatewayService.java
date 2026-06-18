@@ -66,6 +66,20 @@ public class AiGatewayService {
     }
 
     /**
+     * Generate a professional French cover letter / application email tailored to
+     * the job, grounded in the candidate's (optimized) CV. Returns raw JSON
+     * {"subject": "...", "body": "..."} as the AiResult content.
+     */
+    public AiResult generateCoverLetter(String cvText, String jobTitle, String company, String jobDescription) {
+        String system =
+            "You are an expert career writer. You write concise, sincere, professional French cover "
+          + "letters that read naturally (never robotic or generic). You respond ONLY with a single "
+          + "valid JSON object, no markdown, no commentary.";
+        return route(system, buildCoverLetterPrompt(cvText, jobTitle, company, jobDescription),
+                     1100, 0.6, Set.of());
+    }
+
+    /**
      * Pre-flight compatibility check. Fails open — if all providers fail or the
      * response can't be parsed, we allow the optimization rather than blocking
      * the user on an infrastructure hiccup.
@@ -218,6 +232,47 @@ public class AiGatewayService {
             """.formatted(
                 cvText.substring(0, Math.min(cvText.length(), 4000)),
                 jobDescription.substring(0, Math.min(jobDescription.length(), 1500))
+            );
+    }
+
+    private String buildCoverLetterPrompt(String cvText, String jobTitle, String company, String jobDescription) {
+        return """
+            Write a professional cover letter / application email IN FRENCH for this candidate applying
+            to the target job. It must be ready to send: the candidate will paste it into an email or
+            attach it. Ground every claim in the candidate's real CV — never invent experience.
+
+            ## CANDIDATE CV (already optimized for this job):
+            %s
+
+            ## TARGET JOB TITLE:
+            %s
+
+            ## COMPANY:
+            %s
+
+            ## JOB DESCRIPTION:
+            %s
+
+            ## RULES:
+            - French, professional but warm and human — not robotic, not generic filler.
+            - 3 short paragraphs max: (1) why this role/company, (2) the 2-3 most relevant strengths
+              tied to the job's needs, (3) a courteous call to action (availability for an interview).
+            - Reference the actual job title and company. Use real skills/experience from the CV.
+            - The "body" must include a greeting (e.g. "Madame, Monsieur,") and a sign-off, but use the
+              placeholder "[Votre nom]" for the signature (we don't always have the real name).
+            - The "subject" is a concise email subject line in French (e.g. "Candidature — <poste>").
+            - Keep the whole body under ~220 words.
+
+            ## OUTPUT (return ONLY this JSON object, no markdown fences):
+            {
+              "subject": "email subject line in French",
+              "body": "full letter text in French, with \\n line breaks between paragraphs"
+            }
+            """.formatted(
+                cvText == null ? "" : cvText.substring(0, Math.min(cvText.length(), 3500)),
+                jobTitle == null ? "" : jobTitle,
+                company == null ? "" : company,
+                jobDescription == null ? "" : jobDescription.substring(0, Math.min(jobDescription.length(), 1500))
             );
     }
 

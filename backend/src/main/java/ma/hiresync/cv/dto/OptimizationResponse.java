@@ -27,11 +27,17 @@ public record OptimizationResponse(
         String modelUsed,
         Long   processingTimeMs,
         Instant createdAt,
-        Instant completedAt
+        Instant completedAt,
+        String  jobUrl,            // link to the real job posting (to apply externally)
+        boolean coverLetterReady   // true once a cover letter has been generated & cached
 ) {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public static OptimizationResponse from(CvOptimization opt, Object changes) {
+        return from(opt, changes, null);
+    }
+
+    public static OptimizationResponse from(CvOptimization opt, Object changes, String jobUrl) {
         String cvUrl = opt.getOptimizedCvPath() != null
             ? "/api/cv/download/" + opt.getId()
             : null;
@@ -55,7 +61,9 @@ public record OptimizationResponse(
             opt.getModelUsed(),
             opt.getProcessingTimeMs(),
             opt.getCreatedAt(),
-            opt.getCompletedAt()
+            opt.getCompletedAt(),
+            jobUrl,
+            opt.getCoverLetterJson() != null && !opt.getCoverLetterJson().isBlank()
         );
     }
 

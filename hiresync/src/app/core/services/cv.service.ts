@@ -5,7 +5,7 @@ import { environment } from '../../../environments/environment';
 import {
   CV, CVOptimizationRequest, CVOptimizationResult,
   CVOptimizationTriggerResponse, CVOptimizationHistoryItem,
-  CVOptimizationWsEvent,
+  CVOptimizationWsEvent, CoverLetter,
 } from '../models/cv.model';
 import { StructuredCv } from '../models/studio.model';
 
@@ -134,6 +134,12 @@ export class CvService {
 
   getOptimizationResult(id: string): Observable<CVOptimizationResult> {
     return this.http.get<CVOptimizationResult>(`${this.base}/optimize/${id}`);
+  }
+
+  /** POST /api/cv/optimize/{id}/cover-letter — generate or fetch the cached cover letter */
+  generateCoverLetter(id: string, regenerate = false): Observable<CoverLetter> {
+    return this.http.post<CoverLetter>(
+      `${this.base}/optimize/${id}/cover-letter?regenerate=${regenerate}`, {});
   }
 
   getOptimizationHistory(): Observable<CVOptimizationHistoryItem[]> {

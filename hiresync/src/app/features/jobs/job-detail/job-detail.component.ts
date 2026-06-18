@@ -7,7 +7,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { DatePipe } from '@angular/common';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { JobService } from '../../../core/services/job.service';
-import { ApplicationService } from '../../../core/services/application.service';
+import { CvService } from '../../../core/services/cv.service';
 import { Job } from '../../../core/models/job.model';
 
 export interface DescSection {
@@ -29,14 +29,13 @@ export class JobDetailComponent implements OnInit {
   @Input() id!: string;
 
   private jobSvc  = inject(JobService);
-  private appSvc  = inject(ApplicationService);
+  private cvSvc   = inject(CvService);
   private snack   = inject(MatSnackBar);
   private router  = inject(Router);
 
   job         = signal<Job | null>(null);
   similar     = signal<Job[]>([]);
   loading     = signal(true);
-  applying    = signal(false);
   optimizing  = signal(false);
 
   /** Parses the raw description string into styled sections */
@@ -85,20 +84,55 @@ export class JobDetailComponent implements OnInit {
     this.jobSvc.getSimilar(this.id).subscribe(j => this.similar.set(j));
   }
 
-  apply(): void {
-    this.applying.set(true);
-    this.appSvc.apply(this.id, 'cv1').subscribe(() => {
-      this.applying.set(false);
-      this.snack.open('✅ Candidature envoyée avec succès !', 'OK', { duration: 3500 });
+  /**
+   * Entry point of the application flow: optimize the user's active CV for THIS job,
+   * then land on the result page where the candidature kit (optimized CV + cover
+   * letter + apply link) lets them apply on the company's site.
+   */
+  optimizeCV(): void {
+    const job = this.job();
+    if (!job || this.optimizing()) return;
+    this.optimizing.set(true);
+
+    this.cvSvc.getAll().subscribe({
+      next: cvs => {
+        const cv = cvs.find(c => c.isActive) ?? cvs[0];
+        if (!cv) {
+          this.optimizing.set(false);
+          this.snack.open('Ajoutez d\'abord un CV dans « Mon CV » pour pouvoir optimiser.', 'OK', { duration: 4500 });
+          return;
+        }
+        const jobDescription =
+          `${job.title} chez ${job.company ?? ''} — ${job.location ?? ''}. ${job.description ?? ''} ` +
+          `Compétences: ${(job.requirements ?? []).join(', ')}`;
+
+        this.cvSvc.optimize({
+          cvId: cv.id, jobId: job.id, jobTitle: job.title,
+          company: job.company ?? '', jobDescription,
+        }).subscribe({
+          next: res => {
+            this.optimizing.set(false);
+            this.router.navigate(['/cv/optimize', res.optimizationId], {
+              queryParams: { cvId: cv.id, jobId: job.id, jobTitle: job.title },
+            });
+          },
+          error: () => {
+            this.optimizing.set(false);
+            this.snack.open('Impossible de lancer l\'optimisation. Réessayez.', 'OK', { duration: 3500 });
+          },
+        });
+      },
+      error: () => {
+        this.optimizing.set(false);
+        this.snack.open('Erreur lors du chargement de vos CV.', 'OK', { duration: 3500 });
+      },
     });
   }
 
-  optimizeCV(): void {
-    this.optimizing.set(true);
-    setTimeout(() => {
-      this.optimizing.set(false);
-      this.router.navigate(['/cv/optimize/opt1']);
-    }, 1200);
+  /** Open the original job posting in a new tab. */
+  openJobSource(): void {
+    const url = this.job()?.sourceUrl ?? this.job()?.applyUrl;
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   matchClass(score?: number): string {

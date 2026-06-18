@@ -99,6 +99,20 @@ public class CvController {
         return ResponseEntity.ok(cvService.boostKeywords(id, userId, req.keywords()));
     }
 
+    /**
+     * POST /api/cv/optimize/{id}/cover-letter?regenerate=false
+     * Generate (or return the cached) cover letter / application email for the
+     * optimization, grounded in the optimized CV + the original job posting.
+     */
+    @PostMapping("/optimize/{id}/cover-letter")
+    public ResponseEntity<CoverLetterResponse> coverLetter(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "false") boolean regenerate,
+            @RequestHeader("Authorization") String authHeader) {
+        UUID userId = extractUserId(authHeader);
+        return ResponseEntity.ok(cvService.generateCoverLetter(id, userId, regenerate));
+    }
+
     /** GET /api/cv/optimization-history */
     @GetMapping("/optimization-history")
     public ResponseEntity<List<OptimizationResponse>> getHistory(

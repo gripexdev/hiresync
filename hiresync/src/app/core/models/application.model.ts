@@ -9,7 +9,16 @@ export interface Application {
   nextAction?: string;
   notes?: string;
   cvId?: string;
+  cvFileName?: string;
+  coverNote?: string;
   matchScore?: number;
+  updatedAt?: string;
+}
+
+/** Body of POST /api/applications/{jobId} */
+export interface ApplyRequest {
+  cvId: string;
+  coverNote?: string;
 }
 
 export type ApplicationStatus =

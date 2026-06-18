@@ -15,6 +15,8 @@ import ma.hiresync.cv.messaging.OptimizationMessage;
 import ma.hiresync.cv.messaging.OptimizationProducer;
 import ma.hiresync.cv.repository.CvOptimizationRepository;
 import ma.hiresync.cv.repository.CvRepository;
+import ma.hiresync.job.entity.Job;
+import ma.hiresync.job.repository.JobRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +40,8 @@ public class CvService {
     private final CvPdfGenerator           pdfGenerator;
     private final CvTextParser             cvTextParser;
     private final ObjectMapper             objectMapper;
+    private final JobRepository            jobRepo;
+    private final AiGatewayService         aiGateway;
 
     @Value("${hiresync.cv.upload-dir}")
     private String uploadDir;
@@ -154,7 +158,23 @@ public class CvService {
         var optim = optimRepo.findByIdAndCvUserId(optimId, userId)
             .orElseThrow(() -> new RuntimeException("Optimization not found"));
         Object changes = parseChanges(optim.getSuggestedChangesJson());
-        return OptimizationResponse.from(optim, changes);
+        return OptimizationResponse.from(optim, changes, resolveJobUrl(optim));
+    }
+
+    /** Resolve the public link to the original job posting, if the job still exists. */
+    private String resolveJobUrl(CvOptimization optim) {
+        Job job = findJob(optim.getJobId());
+        return job != null ? job.getSourceUrl() : null;
+    }
+
+    /** The optimization stores jobId as a String; resolve to a Job when it's a valid UUID. */
+    private Job findJob(String jobId) {
+        if (jobId == null || jobId.isBlank()) return null;
+        try {
+            return jobRepo.findById(UUID.fromString(jobId)).orElse(null);
+        } catch (IllegalArgumentException e) {
+            return null;   // legacy/non-UUID jobId (e.g. test rows)
+        }
     }
 
     // ── GET /api/cv/optimization-history ─────────────────────────────────────
@@ -321,6 +341,67 @@ public class CvService {
             optimId, keywords.size(), optim.getOriginalScore(), match.score());
 
         return OptimizationResponse.from(optim, parseChanges(optim.getSuggestedChangesJson()));
+    }
+
+    // ── POST /api/cv/optimize/{id}/cover-letter ───────────────────────────────
+    /**
+     * Generate (or return the cached) cover letter / application email for a
+     * completed optimization. The letter is grounded in the optimized CV + the
+     * original job posting, and cached on the optimization after first generation.
+     */
+    public CoverLetterResponse generateCoverLetter(UUID optimId, UUID userId, boolean regenerate) {
+        var optim = optimRepo.findByIdAndCvUserId(optimId, userId)
+            .orElseThrow(() -> new RuntimeException("Optimization not found"));
+
+        if (optim.getStatus() != CvOptimization.OptimizationStatus.COMPLETED)
+            throw new IllegalStateException("La lettre n'est disponible qu'après une optimisation réussie.");
+
+        // Return cached unless a regeneration was explicitly requested
+        if (!regenerate && optim.getCoverLetterJson() != null && !optim.getCoverLetterJson().isBlank()) {
+            return parseCoverLetter(optim.getCoverLetterJson(), optim.getModelUsed());
+        }
+
+        // Build the source CV text from the optimized structured CV (best tailored version)
+        String cvText = optim.getOptimizedCvJson();
+        if (cvText == null || cvText.isBlank()) {
+            var cv = cvRepo.findById(optim.getCv().getId()).orElse(null);
+            cvText = cv != null && cv.getExtractedText() != null ? cv.getExtractedText() : "";
+        }
+
+        Job job = findJob(optim.getJobId());
+        String company = job != null && job.getCompany() != null ? job.getCompany() : optim.getCompany();
+        String jobDesc = job != null && job.getDescription() != null ? job.getDescription() : "";
+
+        var result = aiGateway.generateCoverLetter(cvText, optim.getJobTitle(), company, jobDesc);
+
+        // Normalise to a clean {subject, body} JSON and cache it
+        CoverLetterResponse letter = parseCoverLetter(result.content(), result.provider());
+        try {
+            optim.setCoverLetterJson(objectMapper.writeValueAsString(
+                Map.of("subject", letter.subject(), "body", letter.body())));
+            optimRepo.save(optim);
+        } catch (Exception e) {
+            log.warn("Could not cache cover letter for {}: {}", optimId, e.getMessage());
+        }
+        log.info("Cover letter generated for optimization {} (provider {})", optimId, result.provider());
+        return letter;
+    }
+
+    /** Parse the LLM/cover-letter JSON (strips markdown fences) into a response. */
+    private CoverLetterResponse parseCoverLetter(String raw, String provider) {
+        String json = raw == null ? "" : raw.trim()
+            .replaceAll("(?s)^```[a-zA-Z]*\\s*", "")
+            .replaceAll("(?s)\\s*```$", "").trim();
+        try {
+            JsonNode n = objectMapper.readTree(json);
+            String subject = n.path("subject").asText("Candidature");
+            String body    = n.path("body").asText("");
+            if (body.isBlank()) body = json;   // model returned prose, not JSON — use as-is
+            return new CoverLetterResponse(subject, body, provider);
+        } catch (Exception e) {
+            // Not JSON — treat the whole thing as the body
+            return new CoverLetterResponse("Candidature", json, provider);
+        }
     }
 
     private List<String> parseJsonStringList(String json) {

@@ -68,6 +68,10 @@ public class CvOptimization {
     @Column(columnDefinition = "TEXT")
     private String optimizedCvJson;
 
+    /** AI-generated cover letter / application email as JSON {subject, body}. Cached on first generation. */
+    @Column(columnDefinition = "TEXT")
+    private String coverLetterJson;
+
     /** Path to the optimized CV file on disk */
     private String optimizedCvPath;
 

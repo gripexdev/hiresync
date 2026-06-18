@@ -9,7 +9,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Subject, takeUntil } from 'rxjs';
 import { CvService } from '../../../core/services/cv.service';
 import { WebSocketService } from '../../../core/services/websocket.service';
-import { CVOptimizationResult, OptimizationStatus } from '../../../core/models/cv.model';
+import { CVOptimizationResult, OptimizationStatus, CoverLetter } from '../../../core/models/cv.model';
 
 /** Processing step shown in the loading screen */
 interface ProcessStep {
@@ -36,6 +36,12 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
 
   downloading = signal(false);
   boosting    = signal(false);
+
+  // ── Candidature kit (cover letter + apply link) ───────────────────────────────
+  coverLetter     = signal<CoverLetter | null>(null);
+  generatingLetter = signal(false);
+  letterError     = signal('');
+  copiedField     = signal<'' | 'subject' | 'body'>('');
 
   // ── State ────────────────────────────────────────────────────────────────────
   result          = signal<CVOptimizationResult | null>(null);
@@ -264,6 +270,53 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
         this.snack.open(msg, 'OK', { duration: 5000 });
       },
     });
+  }
+
+  // ── Candidature kit ───────────────────────────────────────────────────────────
+  /** Generate (or fetch the cached) cover letter for this optimization. */
+  generateLetter(regenerate = false): void {
+    if (this.generatingLetter()) return;
+    this.generatingLetter.set(true);
+    this.letterError.set('');
+    this.cvSvc.generateCoverLetter(this.id, regenerate).pipe(
+      takeUntil(this.destroy$),
+    ).subscribe({
+      next: letter => {
+        this.coverLetter.set(letter);
+        this.generatingLetter.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.generatingLetter.set(false);
+        this.letterError.set(
+          err.status === 409 ? (err.error?.message ?? 'Optimisation non terminée.')
+          : err.status === 401 || err.status === 403 ? 'Session expirée — reconnectez-vous.'
+          : 'Impossible de générer la lettre. Réessayez.'
+        );
+      },
+    });
+  }
+
+  copy(field: 'subject' | 'body'): void {
+    const letter = this.coverLetter();
+    if (!letter) return;
+    const text = field === 'subject' ? letter.subject : letter.body;
+    navigator.clipboard?.writeText(text).then(() => {
+      this.copiedField.set(field);
+      setTimeout(() => this.copiedField.set(''), 1800);
+    });
+  }
+
+  copyAll(): void {
+    const letter = this.coverLetter();
+    if (!letter) return;
+    navigator.clipboard?.writeText(`Objet : ${letter.subject}\n\n${letter.body}`).then(() => {
+      this.snack.open('Lettre copiée dans le presse-papiers', 'OK', { duration: 2500 });
+    });
+  }
+
+  openJob(): void {
+    const url = this.result()?.jobUrl;
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   // ── Download ─────────────────────────────────────────────────────────────────

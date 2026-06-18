@@ -66,6 +66,15 @@ export interface CVOptimizationResult {
   processingTimeMs?: number;
   createdAt: string;
   completedAt?: string;
+  jobUrl?: string;            // link to the real job posting (apply externally)
+  coverLetterReady?: boolean; // a cover letter has already been generated
+}
+
+/** AI-generated cover letter / application email */
+export interface CoverLetter {
+  subject: string;
+  body: string;
+  provider?: string;
 }
 
 export type OptimizationStatus = 'pending' | 'queued' | 'processing' | 'completed' | 'failed' | 'rejected';
