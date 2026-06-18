@@ -255,3 +255,13 @@ $primary: #2E86AB; $accent: #17A589;
   mat-icon { font-size: 18px; width: 18px; height: 18px; }
   &:hover { background: #BBF7D0; }
 }
+
+// ── Active CV note (which CV will be used for optimization) ──────────────────────
+.active-cv-note {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin: 12px 0 0; font-size: 12.5px; color: #64748B;
+  mat-icon { font-size: 16px; width: 16px; height: 16px; color: #2E86AB; }
+  strong { color: #1A202C; font-weight: 700; }
+  a { color: #2E86AB; font-weight: 600; text-decoration: none; margin-left: 4px; &:hover { text-decoration: underline; } }
+  &--warn { color: #92400E; mat-icon { color: #D97706; } a { color: #B45309; } }
+}

@@ -34,6 +34,19 @@ public class ApplicationController {
                 .body(applicationService.apply(userId, jobId, req));
     }
 
+    /**
+     * POST /api/applications/{jobId}/mark-applied — record that the user clicked
+     * "Postuler" to apply on the company's site. Idempotent.
+     */
+    @PostMapping("/{jobId}/mark-applied")
+    public ResponseEntity<ApplicationResponse> markApplied(
+            @PathVariable UUID jobId,
+            @Valid @RequestBody ApplyRequest req,
+            @RequestHeader("Authorization") String authHeader) {
+        UUID userId = extractUserId(authHeader);
+        return ResponseEntity.ok(applicationService.markApplied(userId, jobId, req.cvId()));
+    }
+
     /** GET /api/applications — the current user's applications. */
     @GetMapping
     public ResponseEntity<List<ApplicationResponse>> myApplications(

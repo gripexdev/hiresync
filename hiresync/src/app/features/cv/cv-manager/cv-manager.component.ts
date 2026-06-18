@@ -147,6 +147,11 @@ export class CvManagerComponent implements OnInit {
       jobDescription: `${job.title} chez ${job.company ?? ''} — ${job.location ?? ''}. ${job.description ?? ''} Compétences: ${job.requirements?.join(', ') ?? ''}`,
     }).subscribe({
       next: res => {
+        if (res.alreadyOptimized) {
+          this.snack.open('Vous avez déjà optimisé un CV pour cette offre — voici le résultat.', 'OK', { duration: 3500 });
+          this.router.navigate(['/cv/optimize', res.optimizationId]);
+          return;
+        }
         this.snack.open(
           `🚀 Optimisation lancée via l\'IA (${res.optimizationId.slice(-6)}) — vous serez notifié`,
           'Voir', { duration: 5000 }

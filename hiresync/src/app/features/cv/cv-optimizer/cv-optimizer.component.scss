@@ -488,3 +488,10 @@ $primary: #2E86AB; $accent: #17A589;
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
 }
 .letter-provider { font-size: 11px; color: #94A3B8; margin-left: auto; }
+
+.kit-applied {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: 8px;
+  background: #D1FAE5; color: #065F46; font-size: 13px; font-weight: 700;
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+}

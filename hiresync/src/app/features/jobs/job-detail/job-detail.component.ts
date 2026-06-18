@@ -33,10 +33,11 @@ export class JobDetailComponent implements OnInit {
   private snack   = inject(MatSnackBar);
   private router  = inject(Router);
 
-  job         = signal<Job | null>(null);
-  similar     = signal<Job[]>([]);
-  loading     = signal(true);
-  optimizing  = signal(false);
+  job          = signal<Job | null>(null);
+  similar      = signal<Job[]>([]);
+  loading      = signal(true);
+  optimizing   = signal(false);
+  activeCvName = signal<string | null>(null);   // the CV that will be used for optimization
 
   /** Parses the raw description string into styled sections */
   readonly parsedDesc = computed((): DescSection[] => {
@@ -82,6 +83,11 @@ export class JobDetailComponent implements OnInit {
   ngOnInit(): void {
     this.jobSvc.getById(this.id).subscribe(j => { this.job.set(j); this.loading.set(false); });
     this.jobSvc.getSimilar(this.id).subscribe(j => this.similar.set(j));
+    // Show which CV will be used (the active one) so it's transparent before optimizing.
+    this.cvSvc.getAll().subscribe({
+      next: cvs => this.activeCvName.set(cvs.find(c => c.isActive)?.fileName ?? null),
+      error: () => {},
+    });
   }
 
   /**
@@ -96,10 +102,18 @@ export class JobDetailComponent implements OnInit {
 
     this.cvSvc.getAll().subscribe({
       next: cvs => {
-        const cv = cvs.find(c => c.isActive) ?? cvs[0];
+        if (!cvs.length) {
+          this.optimizing.set(false);
+          this.snack.open('Ajoutez d\'abord un CV dans « Mon CV » pour pouvoir optimiser.', 'Mon CV', { duration: 5000 })
+            .onAction().subscribe(() => this.router.navigate(['/cv']));
+          return;
+        }
+        // Always use the ACTIVE CV — the one the user activated in « Mon CV ».
+        const cv = cvs.find(c => c.isActive);
         if (!cv) {
           this.optimizing.set(false);
-          this.snack.open('Ajoutez d\'abord un CV dans « Mon CV » pour pouvoir optimiser.', 'OK', { duration: 4500 });
+          this.snack.open('Activez le CV à utiliser dans « Mon CV », puis réessayez.', 'Mon CV', { duration: 5000 })
+            .onAction().subscribe(() => this.router.navigate(['/cv']));
           return;
         }
         const jobDescription =
@@ -112,9 +126,15 @@ export class JobDetailComponent implements OnInit {
         }).subscribe({
           next: res => {
             this.optimizing.set(false);
-            this.router.navigate(['/cv/optimize', res.optimizationId], {
-              queryParams: { cvId: cv.id, jobId: job.id, jobTitle: job.title },
-            });
+            if (res.alreadyOptimized) {
+              // One optimization per job — go straight to the existing result (no live processing)
+              this.snack.open('Vous avez déjà optimisé votre CV pour cette offre.', 'OK', { duration: 3500 });
+              this.router.navigate(['/cv/optimize', res.optimizationId]);
+            } else {
+              this.router.navigate(['/cv/optimize', res.optimizationId], {
+                queryParams: { cvId: cv.id, jobId: job.id, jobTitle: job.title },
+              });
+            }
           },
           error: () => {
             this.optimizing.set(false);

@@ -124,7 +124,7 @@
           <div class="job-card__footer">
             @if (job.postedAt) { <span class="job-card__date"><mat-icon>schedule</mat-icon>{{ timeAgo(job.postedAt) }}</span> }
             <span class="job-card__source">via {{ job.source }}</span>
-            <button class="hs-btn-primary job-card__cta" (click)="$event.stopPropagation()">
+            <button class="hs-btn-primary job-card__cta" (click)="openSource(job, $event)">
               <mat-icon>open_in_new</mat-icon> Voir l'offre
             </button>
           </div>

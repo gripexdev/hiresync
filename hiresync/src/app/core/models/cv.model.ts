@@ -39,8 +39,9 @@ export interface CVOptimizationRequest {
 /** Response to POST /api/cv/optimize — job queued asynchronously via RabbitMQ */
 export interface CVOptimizationTriggerResponse {
   optimizationId: string;
-  status: 'queued';
+  status: string;            // 'queued' for a new run, or the existing status if already optimized
   message: string;
+  alreadyOptimized: boolean; // true → an optimization for this job already existed
 }
 
 /** Full result fetched from GET /api/cv/optimize/{id} or via WebSocket push */

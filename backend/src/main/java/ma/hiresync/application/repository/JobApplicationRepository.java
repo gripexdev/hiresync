@@ -13,5 +13,7 @@ public interface JobApplicationRepository extends JpaRepository<JobApplication, 
 
     boolean existsByUserIdAndJobId(UUID userId, UUID jobId);
 
+    Optional<JobApplication> findByUserIdAndJobId(UUID userId, UUID jobId);
+
     Optional<JobApplication> findByIdAndUserId(UUID id, UUID userId);
 }

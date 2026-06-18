@@ -47,10 +47,20 @@ public class CvService {
     private String uploadDir;
 
     // ── GET /api/cv/versions ─────────────────────────────────────────────────
-    @Transactional(readOnly = true)
     public List<CvResponse> getAllCvs(UUID userId) {
-        return cvRepo.findByUserIdOrderByUploadedAtDesc(userId)
-                .stream()
+        var cvs = cvRepo.findByUserIdOrderByUploadedAtDesc(userId);
+
+        // Self-heal: a user with CVs must always have exactly one active CV (it's the
+        // one used by default when optimizing for a job). If none is active — e.g. the
+        // previously active CV was deleted — activate the most recent one.
+        if (!cvs.isEmpty() && cvs.stream().noneMatch(Cv::isActive)) {
+            var newest = cvs.get(0);   // list is ordered uploadedAt desc
+            newest.setActive(true);
+            cvRepo.save(newest);
+            log.info("No active CV for user {} — auto-activated most recent {}", userId, newest.getId());
+        }
+
+        return cvs.stream()
                 .map(cv -> {
                     Map<String, String> sections = cv.getExtractedText() != null
                         ? atsScorer.parseSections(cv.getExtractedText())
@@ -122,6 +132,19 @@ public class CvService {
         var cv = cvRepo.findByIdAndUserId(req.cvId(), userId)
             .orElseThrow(() -> new RuntimeException("CV not found"));
 
+        // Enforce one optimization per job, per user. If a previous (non-failed)
+        // optimization for this job exists, return it instead of starting a new run.
+        var existing = optimRepo.findFirstByCvUserIdAndJobIdAndStatusNotOrderByCreatedAtDesc(
+            userId, req.jobId(), CvOptimization.OptimizationStatus.FAILED);
+        if (existing.isPresent()) {
+            var e = existing.get();
+            log.info("Optimization already exists for user {} + job {} → returning {}",
+                userId, req.jobId(), e.getId());
+            return new OptimizeTriggerResponse(
+                e.getId(), e.getStatus().name().toLowerCase(),
+                "Vous avez déjà optimisé votre CV pour cette offre.", true);
+        }
+
         // Create optimization record (status = QUEUED)
         var optim = CvOptimization.builder()
                 .cv(cv)
@@ -148,7 +171,7 @@ public class CvService {
 
         return new OptimizeTriggerResponse(
             optim.getId(), "queued",
-            "Votre CV a été mis en file d'attente pour optimisation par Gemma 4 31B."
+            "Votre CV a été mis en file d'attente pour optimisation.", false
         );
     }
 

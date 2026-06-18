@@ -41,6 +41,19 @@
               <mat-icon>open_in_new</mat-icon> Voir l'offre originale
             </button>
           </div>
+
+          @if (activeCvName(); as cvName) {
+            <p class="active-cv-note">
+              <mat-icon>description</mat-icon>
+              CV utilisé : <strong>{{ cvName }}</strong>
+              <a routerLink="/cv">Changer</a>
+            </p>
+          } @else {
+            <p class="active-cv-note active-cv-note--warn">
+              <mat-icon>info</mat-icon>
+              Aucun CV actif — <a routerLink="/cv">activez-en un</a> pour optimiser.
+            </p>
+          }
         </div>
 
         <!-- Description — structured sections -->

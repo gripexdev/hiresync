@@ -60,6 +60,37 @@ public class ApplicationService {
         return ApplicationResponse.from(application);
     }
 
+    /**
+     * Record that the user went to apply on the company's site (clicked "Postuler").
+     * Idempotent: if an application already exists for this job, it is returned
+     * unchanged — clicking the apply link twice never errors.
+     */
+    public ApplicationResponse markApplied(UUID userId, UUID jobId, UUID cvId) {
+        var existing = appRepo.findByUserIdAndJobId(userId, jobId);
+        if (existing.isPresent()) return ApplicationResponse.from(existing.get());
+
+        Job job = jobRepo.findById(jobId)
+            .orElseThrow(() -> new RuntimeException("Offre introuvable (not found)"));
+        Cv cv = cvRepo.findByIdAndUserId(cvId, userId)
+            .orElseThrow(() -> new RuntimeException("CV introuvable (not found)"));
+
+        var application = JobApplication.builder()
+            .userId(userId)
+            .jobId(job.getId())
+            .jobTitle(job.getTitle())
+            .company(job.getCompany())
+            .location(job.getLocation())
+            .cvId(cv.getId())
+            .cvFileName(cv.getFileName())
+            .status(ApplicationStatus.APPLIED)
+            .matchScore(cv.getAtsScore() > 0 ? cv.getAtsScore() : null)
+            .appliedAt(Instant.now())
+            .build();
+        appRepo.save(application);
+        log.info("User {} marked as applied to job {} ({})", userId, jobId, job.getTitle());
+        return ApplicationResponse.from(application);
+    }
+
     @Transactional(readOnly = true)
     public List<ApplicationResponse> getMyApplications(UUID userId) {
         return appRepo.findByUserIdOrderByAppliedAtDesc(userId)

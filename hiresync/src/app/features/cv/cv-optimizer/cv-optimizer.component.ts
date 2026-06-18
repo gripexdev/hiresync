@@ -8,6 +8,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Subject, takeUntil } from 'rxjs';
 import { CvService } from '../../../core/services/cv.service';
+import { ApplicationService } from '../../../core/services/application.service';
 import { WebSocketService } from '../../../core/services/websocket.service';
 import { CVOptimizationResult, OptimizationStatus, CoverLetter } from '../../../core/models/cv.model';
 
@@ -28,6 +29,7 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
   @Input() id!: string;    // optimizationId from route param
 
   private cvSvc    = inject(CvService);
+  private appSvc   = inject(ApplicationService);
   private wsSvc    = inject(WebSocketService);
   private route    = inject(ActivatedRoute);
   private snack    = inject(MatSnackBar);
@@ -42,6 +44,7 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
   generatingLetter = signal(false);
   letterError     = signal('');
   copiedField     = signal<'' | 'subject' | 'body'>('');
+  applied         = signal(false);   // user clicked "Postuler" (traced server-side)
 
   // ── State ────────────────────────────────────────────────────────────────────
   result          = signal<CVOptimizationResult | null>(null);
@@ -136,6 +139,7 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
             this._markAllStepsDone();
             this.result.set(r);
             this.status.set('completed');
+            this._refreshAppliedState(r);
           } else if (r.status === 'rejected') {
             this.result.set(r);
             this.status.set('rejected');
@@ -202,7 +206,7 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
     this._markAllStepsDone();
     this.cvSvc.getOptimizationResult(this.id)
       .pipe(takeUntil(this.destroy$))
-      .subscribe(r => this.result.set(r));
+      .subscribe(r => { this.result.set(r); this._refreshAppliedState(r); });
   }
 
   // ── Step animation (simulates server progress in the UI) ─────────────────────
@@ -314,9 +318,32 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Open the original posting AND trace that the user went to apply. */
   openJob(): void {
-    const url = this.result()?.jobUrl;
-    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+    const r = this.result();
+    if (!r?.jobUrl) return;
+    window.open(r.jobUrl, '_blank', 'noopener,noreferrer');
+
+    // Record the "Postuler" click so it shows in Candidatures (idempotent server-side)
+    if (!this.applied() && this._isUuid(r.jobId) && r.cvId) {
+      this.appSvc.markApplied(r.jobId, r.cvId).pipe(takeUntil(this.destroy$)).subscribe({
+        next: () => { this.applied.set(true); },
+        error: () => {},   // non-blocking — the link already opened
+      });
+    }
+  }
+
+  /** Check whether this job is already marked as applied (on result load). */
+  private _refreshAppliedState(r: CVOptimizationResult): void {
+    if (!this._isUuid(r.jobId)) return;
+    this.appSvc.checkApplied(r.jobId).pipe(takeUntil(this.destroy$)).subscribe({
+      next: res => this.applied.set(res.applied),
+      error: () => {},
+    });
+  }
+
+  private _isUuid(v?: string): boolean {
+    return !!v && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
   }
 
   // ── Download ─────────────────────────────────────────────────────────────────

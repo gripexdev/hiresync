@@ -1,5 +1,6 @@
 package ma.hiresync.cv.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import ma.hiresync.cv.entity.Cv;
 
 import java.time.Instant;
@@ -14,7 +15,8 @@ public record CvResponse(
         String  mimeType,
         Instant uploadedAt,
         int     atsScore,
-        boolean active,
+        // The Angular client reads `isActive`; emit that key (entity field is `active`).
+        @JsonProperty("isActive") boolean active,
         List<SectionDto> parsedSections
 ) {
     public record SectionDto(String title, String content) {}

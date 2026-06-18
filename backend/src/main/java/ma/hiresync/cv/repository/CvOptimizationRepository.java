@@ -12,4 +12,12 @@ public interface CvOptimizationRepository extends JpaRepository<CvOptimization, 
     List<CvOptimization> findByCvUserIdOrderByCreatedAtDesc(UUID userId);
 
     Optional<CvOptimization> findByIdAndCvUserId(UUID id, UUID userId);
+
+    /**
+     * Most recent optimization a user has for a given job whose status is NOT the
+     * excluded one. Used to enforce "optimize a job only once" — we pass FAILED as
+     * the excluded status so a technical failure can still be retried.
+     */
+    Optional<CvOptimization> findFirstByCvUserIdAndJobIdAndStatusNotOrderByCreatedAtDesc(
+            UUID userId, String jobId, CvOptimization.OptimizationStatus status);
 }

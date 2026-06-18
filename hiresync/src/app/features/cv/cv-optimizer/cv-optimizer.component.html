@@ -261,9 +261,16 @@
           <p class="kit-step__desc">Rendez-vous sur l'offre originale et postulez avec ce que vous venez de préparer.</p>
           <div class="kit-step__actions">
             @if (r.jobUrl) {
-              <button class="hs-btn-primary kit-btn" (click)="openJob()">
-                <mat-icon>open_in_new</mat-icon> Postuler sur le site
-              </button>
+              @if (applied()) {
+                <span class="kit-applied"><mat-icon>check_circle</mat-icon> Postulé</span>
+                <button class="hs-btn-secondary kit-btn" (click)="openJob()">
+                  <mat-icon>open_in_new</mat-icon> Revoir l'offre
+                </button>
+              } @else {
+                <button class="hs-btn-primary kit-btn" (click)="openJob()">
+                  <mat-icon>open_in_new</mat-icon> Postuler sur le site
+                </button>
+              }
             } @else {
               <span class="kit-nolink"><mat-icon>info</mat-icon> Lien de l'offre indisponible</span>
             }

@@ -1,6 +1,6 @@
 import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterModule } from '@angular/router';
+import { RouterModule, Router } from '@angular/router';
 import { ReactiveFormsModule, FormBuilder } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -25,10 +25,11 @@ import { Job, JobFacets } from '../../../core/models/job.model';
   styleUrls: ['./job-search.component.scss'],
 })
 export class JobSearchComponent implements OnInit {
-  private fb    = inject(FormBuilder);
-  private svc   = inject(JobService);
-  private snack = inject(MatSnackBar);
-  auth          = inject(AuthService);
+  private fb     = inject(FormBuilder);
+  private svc    = inject(JobService);
+  private snack  = inject(MatSnackBar);
+  private router = inject(Router);
+  auth           = inject(AuthService);
 
   jobs        = signal<Job[]>([]);
   total       = signal(0);
@@ -146,6 +147,12 @@ export class JobSearchComponent implements OnInit {
     if (score >= 80) return 'match--high';
     if (score >= 60) return 'match--med';
     return 'match--low';
+  }
+
+  /** Open the job's detail page inside the app (stops duplicate card navigation). */
+  openSource(job: Job, event: Event): void {
+    event.stopPropagation();
+    this.router.navigate(['/jobs', job.id]);
   }
 
   timeAgo(date: string): string {

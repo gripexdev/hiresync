@@ -29,4 +29,9 @@ export class ApplicationService {
   checkApplied(jobId: string): Observable<{ applied: boolean }> {
     return this.http.get<{ applied: boolean }>(`${this.base}/check/${jobId}`);
   }
+
+  /** POST /api/applications/{jobId}/mark-applied — record the "Postuler" click (idempotent) */
+  markApplied(jobId: string, cvId: string): Observable<Application> {
+    return this.http.post<Application>(`${this.base}/${jobId}/mark-applied`, { cvId });
+  }
 }
