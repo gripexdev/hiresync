@@ -165,110 +165,17 @@
   </div>
 }
 
-<!-- ── Optimization history ─────────────────────────────────────────────────── -->
+<!-- ── Optimization history → dedicated page ─────────────────────────────────── -->
 @if (history().length > 0) {
   <div class="section-divider">
     <h2><mat-icon>history</mat-icon> Historique des optimisations</h2>
   </div>
-  <div class="hs-card history-card">
-    <table class="history-table">
-      <thead>
-        <tr>
-          <th>Poste ciblé</th>
-          <th>Date</th>
-          <th>Statut</th>
-          <th>Résultat</th>
-          <th>Gain</th>
-          <th>Modèle IA</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (item of history(); track item.id) {
-          <tr [class.tr-failed]="item.status === 'failed'"
-              [class.tr-rejected]="item.status === 'rejected'">
-            <td class="td-job">
-              <span class="td-job__title">{{ item.jobTitle }}</span>
-              <span class="td-job__company">{{ item.company }}</span>
-            </td>
-            <td>{{ item.createdAt | date:'dd/MM/yyyy' }}</td>
-
-            <!-- Statut -->
-            <td>
-              @switch (item.status) {
-                @case ('completed') {
-                  <span class="status-chip status-chip--done"><mat-icon>check_circle</mat-icon> Optimisé</span>
-                }
-                @case ('rejected') {
-                  <span class="status-chip status-chip--rejected"><mat-icon>block</mat-icon> Incompatible</span>
-                }
-                @case ('failed') {
-                  <span class="status-chip status-chip--failed"><mat-icon>error</mat-icon> Échec</span>
-                }
-                @default {
-                  <span class="status-chip status-chip--pending"><mat-icon>hourglass_empty</mat-icon> En cours…</span>
-                }
-              }
-            </td>
-
-            <!-- Score / résultat -->
-            <td>
-              @if (item.status === 'completed') {
-                <span class="score-flow">
-                  <span class="score-chip score-chip--before">{{ item.originalScore }}%</span>
-                  <mat-icon class="score-flow__arrow">arrow_forward</mat-icon>
-                  <span class="score-chip score-chip--after">{{ item.optimizedScore }}%</span>
-                </span>
-              } @else if (item.status === 'rejected') {
-                <span class="compat-chip"
-                      matTooltip="Compatibilité entre votre profil et l'offre">
-                  {{ item.compatibilityScore ?? 0 }}% compatible
-                </span>
-              } @else {
-                <span class="td-muted">—</span>
-              }
-            </td>
-
-            <!-- Gain -->
-            <td>
-              @if (item.status === 'completed') {
-                <span class="gain-chip">+{{ item.optimizedScore - item.originalScore }} pts</span>
-              } @else {
-                <span class="td-muted">—</span>
-              }
-            </td>
-
-            <!-- Modèle IA — only meaningful when a rewrite actually ran -->
-            <td class="td-model">
-              @if (item.status === 'completed') { {{ modelLabel(item) }} }
-              @else { <span class="td-muted">—</span> }
-            </td>
-
-            <!-- Action -->
-            <td>
-              @if (item.status === 'completed') {
-                <a [routerLink]="'/cv/optimize/' + item.id" class="view-link"
-                   matTooltip="Voir le résultat complet">
-                  <mat-icon>open_in_new</mat-icon>
-                </a>
-              } @else if (item.status === 'rejected') {
-                <a [routerLink]="'/cv/optimize/' + item.id" class="view-link"
-                   matTooltip="Voir pourquoi le profil ne correspond pas">
-                  <mat-icon>open_in_new</mat-icon>
-                </a>
-              } @else if (item.status === 'failed') {
-                <span class="view-link-disabled" matTooltip="Optimisation échouée">
-                  <mat-icon>error_outline</mat-icon>
-                </span>
-              } @else {
-                <span class="view-link-disabled" matTooltip="En cours…">
-                  <mat-icon>hourglass_empty</mat-icon>
-                </span>
-              }
-            </td>
-          </tr>
-        }
-      </tbody>
-    </table>
-  </div>
+  <a routerLink="/cv/history" class="hs-card history-cta">
+    <div class="history-cta__icon"><mat-icon>history</mat-icon></div>
+    <div class="history-cta__body">
+      <span class="history-cta__title">{{ history().length }} optimisation(s) enregistrée(s)</span>
+      <span class="history-cta__sub">Consultez les résultats ATS, les gains et le détail de chaque analyse sur la page dédiée.</span>
+    </div>
+    <span class="history-cta__action">Voir l'historique <mat-icon>arrow_forward</mat-icon></span>
+  </a>
 }

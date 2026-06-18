@@ -1,0 +1,215 @@
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<div class="hist-head">
+  <div class="hist-head__text">
+    <a routerLink="/cv" class="back-link"><mat-icon>arrow_back</mat-icon> Mon CV</a>
+    <h1>Historique des optimisations</h1>
+    <p>Retrouvez toutes vos optimisations de CV, leurs résultats ATS et le détail de chaque analyse.</p>
+  </div>
+  <a routerLink="/cv" class="hs-btn-primary hist-head__cta">
+    <mat-icon>auto_awesome</mat-icon> Optimiser un CV
+  </a>
+</div>
+
+<!-- ── Loading ────────────────────────────────────────────────────────────── -->
+@if (loading()) {
+  <div class="hist-loading">
+    <mat-spinner diameter="36" />
+    <span>Chargement de votre historique…</span>
+  </div>
+}
+
+@else if (errored()) {
+  <div class="hs-card hist-empty">
+    <div class="hist-empty__icon hist-empty__icon--error"><mat-icon>cloud_off</mat-icon></div>
+    <h2>Impossible de charger l'historique</h2>
+    <p>Une erreur réseau est survenue. Réessayez dans quelques instants.</p>
+  </div>
+}
+
+<!-- ── Empty (no optimizations at all) ────────────────────────────────────── -->
+@else if (totalCount() === 0) {
+  <div class="hs-card hist-empty">
+    <div class="hist-empty__icon"><mat-icon>history</mat-icon></div>
+    <h2>Aucune optimisation pour l'instant</h2>
+    <p>Lancez votre première optimisation depuis le gestionnaire de CV pour la voir apparaître ici.</p>
+    <a routerLink="/cv" class="hs-btn-primary"><mat-icon>auto_awesome</mat-icon> Optimiser mon CV</a>
+  </div>
+}
+
+<!-- ── Content ────────────────────────────────────────────────────────────── -->
+@else {
+  <!-- Summary stats -->
+  <div class="stat-grid">
+    <div class="hs-card stat-card">
+      <div class="stat-card__icon stat-card__icon--blue"><mat-icon>insights</mat-icon></div>
+      <div class="stat-card__body">
+        <span class="stat-card__value">{{ totalCount() }}</span>
+        <span class="stat-card__label">Optimisations</span>
+      </div>
+    </div>
+
+    <div class="hs-card stat-card">
+      <div class="stat-card__icon stat-card__icon--green"><mat-icon>check_circle</mat-icon></div>
+      <div class="stat-card__body">
+        <span class="stat-card__value">{{ completedCount() }}</span>
+        <span class="stat-card__label">Réussies</span>
+      </div>
+    </div>
+
+    <div class="hs-card stat-card">
+      <div class="stat-card__icon stat-card__icon--amber"><mat-icon>trending_up</mat-icon></div>
+      <div class="stat-card__body">
+        <span class="stat-card__value">+{{ avgGain() }}<small>pts</small></span>
+        <span class="stat-card__label">Gain moyen</span>
+      </div>
+    </div>
+
+    <div class="hs-card stat-card">
+      <div class="stat-card__icon stat-card__icon--violet"><mat-icon>military_tech</mat-icon></div>
+      <div class="stat-card__body">
+        <span class="stat-card__value" [style.color]="scoreColor(bestScore())">{{ bestScore() }}<small>%</small></span>
+        <span class="stat-card__label">Meilleur score</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toolbar: filters + search -->
+  <div class="hist-toolbar">
+    <div class="filter-tabs">
+      @for (f of filters(); track f.key) {
+        <button class="filter-tab"
+                [class.filter-tab--active]="filter() === f.key"
+                (click)="setFilter(f.key)"
+                type="button">
+          <mat-icon>{{ f.icon }}</mat-icon>
+          <span>{{ f.label }}</span>
+          <span class="filter-tab__count">{{ f.count }}</span>
+        </button>
+      }
+    </div>
+
+    <div class="hist-search">
+      <mat-icon>search</mat-icon>
+      <input type="text"
+             placeholder="Rechercher un poste ou une entreprise…"
+             [value]="search()"
+             (input)="onSearch($event)" />
+      @if (search()) {
+        <button class="hist-search__clear" (click)="clearSearch()" type="button" aria-label="Effacer">
+          <mat-icon>close</mat-icon>
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- Results -->
+  @if (visible().length === 0) {
+    <div class="hs-card hist-empty hist-empty--compact">
+      <div class="hist-empty__icon"><mat-icon>filter_alt_off</mat-icon></div>
+      <h2>Aucun résultat</h2>
+      <p>Aucune optimisation ne correspond à ce filtre ou à votre recherche.</p>
+    </div>
+  } @else {
+    <div class="hs-card hist-table-card">
+      <table class="hist-table">
+        <thead>
+          <tr>
+            <th>Poste ciblé</th>
+            <th>Date</th>
+            <th>Statut</th>
+            <th>Résultat ATS</th>
+            <th>Gain</th>
+            <th>Modèle IA</th>
+            <th class="th-action"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of visible(); track trackById($index, item)) {
+            <tr [class.tr-failed]="item.status === 'failed'"
+                [class.tr-rejected]="item.status === 'rejected'">
+              <!-- Poste -->
+              <td class="td-job">
+                <span class="td-job__title">{{ item.jobTitle }}</span>
+                <span class="td-job__company">{{ item.company }}</span>
+              </td>
+
+              <!-- Date -->
+              <td class="td-date">{{ item.createdAt | date:'dd MMM yyyy' }}</td>
+
+              <!-- Statut -->
+              <td>
+                @switch (item.status) {
+                  @case ('completed') {
+                    <span class="status-chip status-chip--done"><mat-icon>check_circle</mat-icon> Optimisé</span>
+                  }
+                  @case ('rejected') {
+                    <span class="status-chip status-chip--rejected"><mat-icon>block</mat-icon> Incompatible</span>
+                  }
+                  @case ('failed') {
+                    <span class="status-chip status-chip--failed"><mat-icon>error</mat-icon> Échec</span>
+                  }
+                  @default {
+                    <span class="status-chip status-chip--pending"><mat-icon>hourglass_empty</mat-icon> En cours…</span>
+                  }
+                }
+              </td>
+
+              <!-- Résultat -->
+              <td>
+                @if (item.status === 'completed') {
+                  <span class="score-flow">
+                    <span class="score-chip score-chip--before">{{ item.originalScore }}%</span>
+                    <mat-icon class="score-flow__arrow">arrow_forward</mat-icon>
+                    <span class="score-chip score-chip--after">{{ item.optimizedScore }}%</span>
+                  </span>
+                } @else if (item.status === 'rejected') {
+                  <span class="compat-chip" matTooltip="Compatibilité entre votre profil et l'offre">
+                    {{ item.compatibilityScore ?? 0 }}% compatible
+                  </span>
+                } @else {
+                  <span class="td-muted">—</span>
+                }
+              </td>
+
+              <!-- Gain -->
+              <td>
+                @if (item.status === 'completed') {
+                  <span class="gain-chip">+{{ item.optimizedScore - item.originalScore }} pts</span>
+                } @else {
+                  <span class="td-muted">—</span>
+                }
+              </td>
+
+              <!-- Modèle -->
+              <td class="td-model">
+                @if (item.status === 'completed') {
+                  <span class="model-badge">{{ modelLabel(item) }}</span>
+                } @else {
+                  <span class="td-muted">—</span>
+                }
+              </td>
+
+              <!-- Action -->
+              <td class="td-action">
+                @if (item.status === 'completed' || item.status === 'rejected') {
+                  <a [routerLink]="'/cv/optimize/' + item.id" class="view-btn"
+                     matTooltip="Voir le résultat complet">
+                    <span>Voir</span><mat-icon>open_in_new</mat-icon>
+                  </a>
+                } @else if (item.status === 'failed') {
+                  <span class="view-btn view-btn--disabled" matTooltip="Optimisation échouée">
+                    <mat-icon>error_outline</mat-icon>
+                  </span>
+                } @else {
+                  <span class="view-btn view-btn--disabled" matTooltip="En cours…">
+                    <mat-icon>hourglass_empty</mat-icon>
+                  </span>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}

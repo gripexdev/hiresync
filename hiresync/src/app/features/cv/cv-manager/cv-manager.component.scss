@@ -231,3 +231,30 @@ $primary: #2E86AB; $accent: #17A589;
   &--failed   { background: #FEE2E2; color: #B91C1C; }
   &--pending  { background: #FEF3C7; color: #92400E; }
 }
+
+// ── Historique CTA (links to the dedicated history page) ─────────────────────────
+.history-cta {
+  display: flex; align-items: center; gap: 16px;
+  padding: 18px 22px; text-decoration: none; cursor: pointer;
+
+  &__icon {
+    width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
+    background: rgba(46,134,171,.1);
+    display: flex; align-items: center; justify-content: center;
+    mat-icon { font-size: 26px; width: 26px; height: 26px; color: #2E86AB; }
+  }
+  &__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  &__title { font-size: 15px; font-weight: 700; color: #1A202C; }
+  &__sub   { font-size: 13px; color: #64748B; line-height: 1.45; }
+  &__action {
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    font-size: 14px; font-weight: 600; color: #2E86AB;
+    mat-icon { font-size: 18px; width: 18px; height: 18px; transition: transform 0.15s; }
+  }
+  &:hover &__action mat-icon { transform: translateX(3px); }
+
+  @media (max-width: 560px) {
+    flex-wrap: wrap;
+    &__action { width: 100%; justify-content: flex-end; }
+  }
+}

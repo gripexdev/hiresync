@@ -39,6 +39,10 @@ export const routes: Routes = [
         loadComponent: () => import('./features/cv/cv-manager/cv-manager.component').then(m => m.CvManagerComponent),
       },
       {
+        path: 'cv/history',
+        loadComponent: () => import('./features/cv/optimization-history/optimization-history.component').then(m => m.OptimizationHistoryComponent),
+      },
+      {
         path: 'cv/optimize/:id',
         loadComponent: () => import('./features/cv/cv-optimizer/cv-optimizer.component').then(m => m.CvOptimizerComponent),
       },

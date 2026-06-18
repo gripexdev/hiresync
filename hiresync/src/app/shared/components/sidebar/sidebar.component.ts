@@ -32,7 +32,8 @@ export class SidebarComponent {
   readonly navItems: NavItem[] = [
     { label: 'Tableau de bord', icon: 'dashboard',    route: '/dashboard', exact: true },
     { label: 'Offres d\'emploi', icon: 'work',         route: '/jobs' },
-    { label: 'Mon CV',           icon: 'description',  route: '/cv' },
+    { label: 'Mon CV',           icon: 'description',  route: '/cv', exact: true },
+    { label: 'Historique CV',    icon: 'history',      route: '/cv/history' },
     { label: 'Candidatures',     icon: 'track_changes', route: '/applications' },
     { label: 'Notifications',    icon: 'notifications', route: '/notifications' },
   ];
