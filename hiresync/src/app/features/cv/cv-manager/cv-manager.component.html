@@ -44,16 +44,18 @@
     <p>Uploadez votre premier CV pour commencer l'optimisation IA</p>
   </div>
 } @else {
+  <!-- Section header: count + active CV indicator -->
+  <div class="cv-list-head">
+    <h2>Mes CV <span class="cv-count">{{ cvs().length }}</span></h2>
+    <span class="cv-list-head__hint">
+      <mat-icon>info_outline</mat-icon>
+      Le CV <strong>actif</strong> est celui utilisé par défaut pour vos candidatures.
+    </span>
+  </div>
+
   <div class="cv-grid">
     @for (cv of cvs(); track cv.id) {
       <div class="hs-card cv-card" [class.cv-card--active]="cv.isActive">
-
-        <!-- Active badge -->
-        @if (cv.isActive) {
-          <div class="cv-active-badge">
-            <mat-icon>check_circle</mat-icon> CV actif
-          </div>
-        }
 
         <!-- Header: icon + info + ATS ring -->
         <div class="cv-card__header">
@@ -61,10 +63,13 @@
           <div class="cv-card__info">
             <span class="cv-card__name" [matTooltip]="cv.fileName">{{ cv.fileName }}</span>
             <span class="cv-card__meta">
-              {{ cv.uploadedAt | date:'dd/MM/yyyy' }}
-              @if (cv.fileSize) { · {{ formatSize(cv.fileSize) }} }
-              @if (cv.optimizationCount) { · {{ cv.optimizationCount }} optim. }
+              <mat-icon>event</mat-icon>{{ cv.uploadedAt | date:'dd MMM yyyy' }}
+              @if (cv.fileSize) { <span class="dot">·</span>{{ formatSize(cv.fileSize) }} }
+              @if (cv.optimizationCount) { <span class="dot">·</span>{{ cv.optimizationCount }} optim. }
             </span>
+            @if (cv.isActive) {
+              <span class="cv-active-badge"><mat-icon>check_circle</mat-icon> CV actif</span>
+            }
           </div>
 
           @if (cv.atsScore > 0) {
@@ -95,14 +100,14 @@
             </div>
           </div>
           <div class="cv-score-meta">
-            <span [style.color]="scoreColor(cv.atsScore)" style="font-weight:600">
+            <span class="cv-score-label" [style.color]="scoreColor(cv.atsScore)">
               {{ scoreLabel(cv.atsScore) }}
             </span>
             <span class="cv-score-tip">
               @if (cv.atsScore < 70) {
-                Optimisez ce CV avec l'IA pour augmenter vos chances
+                Optimisez ce CV pour augmenter vos chances
               } @else {
-                Bon score — votre CV passe la plupart des filtres ATS
+                Bon score — passe la plupart des filtres ATS
               }
             </span>
           </div>
@@ -113,27 +118,13 @@
           </div>
         }
 
-        <!-- Parsed sections -->
-        @if (cv.parsedSections?.length) {
-          <div class="cv-sections">
-            @for (section of cv.parsedSections!; track section.title) {
-              <div class="cv-section">
-                <span class="cv-section__title">{{ section.title }}</span>
-                <p class="cv-section__content">{{ section.content }}</p>
-              </div>
-            }
-          </div>
-        }
-
-        <!-- Actions row -->
+        <!-- Actions row — always visible -->
         <div class="cv-card__actions">
-          <!-- Optimize -->
-          <button class="hs-btn-accent cv-btn" (click)="openOptimizeDialog(cv)"
+          <button class="hs-btn-accent cv-btn cv-btn--optimize" (click)="openOptimizeDialog(cv)"
                   matTooltip="Optimiser ce CV pour une offre avec l'IA">
             <mat-icon>auto_awesome</mat-icon> Optimiser IA
           </button>
 
-          <!-- Set active -->
           @if (!cv.isActive) {
             <button class="hs-btn-secondary cv-btn"
                     [disabled]="activating() === cv.id"
@@ -148,7 +139,6 @@
             </button>
           }
 
-          <!-- Delete -->
           <button class="cv-btn cv-btn--delete"
                   [disabled]="deleting() === cv.id"
                   (click)="deleteCv(cv)"
@@ -160,6 +150,26 @@
             }
           </button>
         </div>
+
+        <!-- Collapsible parsed-content preview -->
+        @if (cv.parsedSections?.length) {
+          <button class="cv-preview-toggle" (click)="toggleExpand(cv.id)" type="button">
+            <mat-icon>{{ isExpanded(cv.id) ? 'expand_less' : 'expand_more' }}</mat-icon>
+            {{ isExpanded(cv.id) ? 'Masquer le contenu analysé' : 'Aperçu du contenu analysé' }}
+            <span class="cv-preview-toggle__count">{{ cv.parsedSections!.length }} sections</span>
+          </button>
+
+          @if (isExpanded(cv.id)) {
+            <div class="cv-sections">
+              @for (section of cv.parsedSections!; track section.title) {
+                <div class="cv-section">
+                  <span class="cv-section__title">{{ section.title }}</span>
+                  <p class="cv-section__content">{{ section.content }}</p>
+                </div>
+              }
+            </div>
+          }
+        }
       </div>
     }
   </div>

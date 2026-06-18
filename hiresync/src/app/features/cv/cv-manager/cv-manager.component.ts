@@ -41,6 +41,18 @@ export class CvManagerComponent implements OnInit {
   activating = signal<string | null>(null);
   deleting   = signal<string | null>(null);
 
+  // Which cards have their parsed-content preview expanded
+  expanded = signal<Set<string>>(new Set());
+
+  toggleExpand(id: string): void {
+    this.expanded.update(set => {
+      const next = new Set(set);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+  isExpanded(id: string): boolean { return this.expanded().has(id); }
+
   // Derived helpers
   readonly circumference = 2 * Math.PI * 28;
 
