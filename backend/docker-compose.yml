@@ -63,6 +63,8 @@ services:
       RABBITMQ_PASS:      hiresync123
       # Secrets — read from backend/.env (copy .env.example → .env and fill in)
       JWT_SECRET:         ${JWT_SECRET}
+      GEMINI_API_KEY:     ${GEMINI_API_KEY}
+      GROQ_API_KEY:       ${GROQ_API_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL:   ${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}
       FLARESOLVERR_URL:   http://hiresync-flaresolverr:8191

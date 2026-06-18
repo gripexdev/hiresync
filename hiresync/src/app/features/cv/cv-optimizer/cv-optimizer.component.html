@@ -49,7 +49,7 @@
         <div class="ai-transport__sep">→</div>
         <div class="ai-transport__item ai-transport__item--model">
           <mat-icon>psychology</mat-icon>
-          <span>google/gemma-4-31b-it:free</span>
+          <span>{{ activeProvider() || 'AI Gateway (Gemini · Groq · OpenRouter)' }}</span>
         </div>
         <div class="ai-transport__sep">→</div>
         <div class="ai-transport__item">
@@ -69,7 +69,7 @@
     <div class="hs-card error-card">
       <mat-icon>error_outline</mat-icon>
       <h2>Optimisation échouée</h2>
-      <p>Une erreur s'est produite. Cela peut arriver si le quota OpenRouter est dépassé. Réessayez dans quelques minutes.</p>
+      <p>Tous les services IA sont temporairement indisponibles. Le système essaie automatiquement Gemini, Groq et OpenRouter — réessayez dans quelques minutes.</p>
       <a routerLink="/cv" class="hs-btn-secondary">Retour au CV Manager</a>
     </div>
   </div>
@@ -248,14 +248,14 @@
           @for (change of r.suggestedChanges; track change.description) {
             <div class="change-item">
               <div class="change-item__icon"
-                   [style.background]="changeColors[change.type] + '18'"
-                   [style.color]="changeColors[change.type]">
-                <mat-icon>{{ changeIcons[change.type] }}</mat-icon>
+                   [style.background]="changeColor(change.type) + '18'"
+                   [style.color]="changeColor(change.type)">
+                <mat-icon>{{ changeIcon(change.type) }}</mat-icon>
               </div>
               <div class="change-item__body">
                 <span class="change-item__type"
-                      [style.background]="changeColors[change.type] + '18'"
-                      [style.color]="changeColors[change.type]">
+                      [style.background]="changeColor(change.type) + '18'"
+                      [style.color]="changeColor(change.type)">
                   {{ changeLabel(change.type) }}
                 </span>
                 <p class="change-item__desc">{{ change.description }}</p>
@@ -306,7 +306,7 @@
           <div class="ai-info-rows">
             <div class="ai-info-row">
               <span>Modèle</span>
-              <span class="mono">{{ r.modelUsed ?? 'Gemma 4 31B' }}</span>
+              <span class="mono">{{ r.modelUsed ?? activeProvider() || 'AI Gateway' }}</span>
             </div>
             @if (r.processingTimeMs) {
               <div class="ai-info-row">

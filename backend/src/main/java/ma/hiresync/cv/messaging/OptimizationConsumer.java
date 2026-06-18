@@ -8,8 +8,8 @@ import ma.hiresync.cv.entity.Cv;
 import ma.hiresync.cv.entity.CvOptimization;
 import ma.hiresync.cv.repository.CvOptimizationRepository;
 import ma.hiresync.cv.repository.CvRepository;
+import ma.hiresync.cv.service.AiGatewayService;
 import ma.hiresync.cv.service.AtsScorer;
-import ma.hiresync.cv.service.OpenRouterService;
 import ma.hiresync.notification.NotificationService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
@@ -36,7 +36,7 @@ public class OptimizationConsumer {
 
     private final CvOptimizationRepository optimRepo;
     private final CvRepository             cvRepo;
-    private final OpenRouterService        openRouter;
+    private final AiGatewayService         aiGateway;
     private final AtsScorer                atsScorer;
     private final NotificationService      notificationSvc;
     private final ObjectMapper             objectMapper;
@@ -76,7 +76,7 @@ public class OptimizationConsumer {
             // ── Step 1.5: Pre-flight compatibility gate ──────────────────────
             // Stop unrealistic optimizations (e.g. software dev → commercial assistant)
             // instead of fabricating a CV that doesn't fit the profession.
-            var verdict = openRouter.assessCompatibility(cvText, optim.getJobTitle(), msg.jobDescription());
+            var verdict = aiGateway.assessCompatibility(cvText, optim.getJobTitle(), msg.jobDescription());
             optim.setCompatibilityScore(verdict.score());
             optim.setCandidateProfile(verdict.candidateProfile());
             optim.setTargetProfile(verdict.targetProfile());
@@ -98,10 +98,11 @@ public class OptimizationConsumer {
             }
 
             notificationSvc.pushCvOptimizationEvent(userId, optim.getId(), "processing",
-                "Profil compatible — réécriture en cours par Gemma 4 31B…");
+                "Profil compatible — réécriture en cours par l'IA…");
 
-            // ── Step 2: Call OpenRouter (Gemma 4 31B free) ───────────────────
-            String llmResponse = openRouter.optimizeCv(cvText, msg.jobDescription());
+            // ── Step 2: Call AI gateway (Gemini → Groq → OpenRouter → Local) ─
+            var aiResult    = aiGateway.optimizeCv(cvText, msg.jobDescription());
+            String llmResponse = aiResult.content();
 
             // ── Step 3: Split the response into {atsKeywords, suggestions, optimizedCv}
             String suggestionsJson = extractSuggestions(llmResponse);
@@ -123,7 +124,7 @@ public class OptimizationConsumer {
             optim.setOptimizedCvJson(optimizedCvJson);
             optim.setMatchedKeywordsJson(toJsonArray(after.matched()));
             optim.setMissingKeywordsJson(toJsonArray(after.missing()));
-            optim.setModelUsed("google/gemma-4-31b-it:free");
+            optim.setModelUsed(aiResult.provider());
             optim.setProcessingTimeMs(System.currentTimeMillis() - start);
             optim.setCompletedAt(Instant.now());
             optimRepo.save(optim);
@@ -133,7 +134,8 @@ public class OptimizationConsumer {
                 userId, optim.getId(), "completed",
                 String.format("CV optimisé ! Score ATS : %d%% → %d%% (%d/%d mots-clés)",
                     before.score(), after.score(), after.matched().size(),
-                    after.matched().size() + after.missing().size())
+                    after.matched().size() + after.missing().size()),
+                aiResult.provider()   // tell Angular which model actually ran
             );
             log.info("Optimization {} completed in {}ms. ATS {}%→{}%, keywords {}/{} matched",
                 optim.getId(), System.currentTimeMillis() - start, before.score(), after.score(),
@@ -146,7 +148,7 @@ public class OptimizationConsumer {
             optimRepo.save(optim);
             notificationSvc.pushCvOptimizationEvent(
                 userId, optim.getId(), "failed",
-                "Optimisation échouée (quota OpenRouter ?). Réessayez dans 1 minute."
+                "Tous les services IA sont temporairement indisponibles. Réessayez dans quelques minutes."
             );
         }
     }
@@ -175,12 +177,45 @@ public class OptimizationConsumer {
         var root = parseRoot(llmResponse);
         try {
             if (root == null) return "[]";
-            if (root.isArray()) return root.toString();              // bare array (old format)
-            if (root.has("suggestions")) return root.get("suggestions").toString();
-            return "[]";
+            com.fasterxml.jackson.databind.JsonNode arr =
+                root.isArray() ? root : root.has("suggestions") ? root.get("suggestions") : null;
+            if (arr == null || !arr.isArray()) return "[]";
+            return normalizeSuggestionTypes(arr).toString();
         } catch (Exception e) {
             return "[]";
         }
+    }
+
+    /**
+     * The LLM occasionally invents suggestion types outside our 4-value enum
+     * (e.g. "summary_rewritten", "contact_info_added"). Map every entry onto a
+     * canonical type so the UI styling and the PDF generator always recognise it.
+     */
+    private com.fasterxml.jackson.databind.JsonNode normalizeSuggestionTypes(
+            com.fasterxml.jackson.databind.JsonNode arr) {
+        var out = objectMapper.createArrayNode();
+        arr.forEach(node -> {
+            if (node.isObject()) {
+                var obj = (com.fasterxml.jackson.databind.node.ObjectNode) node.deepCopy();
+                obj.put("type", canonicalSuggestionType(node.path("type").asText("")));
+                out.add(obj);
+            } else {
+                out.add(node);
+            }
+        });
+        return out;
+    }
+
+    private String canonicalSuggestionType(String raw) {
+        String t = raw == null ? "" : raw.toLowerCase();
+        if (t.equals("keyword_added") || t.equals("section_rewritten")
+         || t.equals("format_improved") || t.equals("skill_added")) return t;
+        if (t.contains("keyword")) return "keyword_added";
+        if (t.contains("skill") || t.contains("competenc")) return "skill_added";
+        if (t.contains("rewrit") || t.contains("summary") || t.contains("section") || t.contains("content"))
+            return "section_rewritten";
+        // contact/format/structure/layout and everything else → format bucket
+        return "format_improved";
     }
 
     /** Extract the "optimizedCv" object as JSON, or null if not present. */

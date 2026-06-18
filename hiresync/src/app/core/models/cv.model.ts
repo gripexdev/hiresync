@@ -82,6 +82,7 @@ export interface CVOptimizationWsEvent {
   optimizationId: string;
   status: OptimizationStatus;
   message?: string;
+  provider?: string;   // actual AI provider that ran (e.g. "Groq Llama 3.3 70B")
 }
 
 // ── Optimization history entry ────────────────────────────────────────────────

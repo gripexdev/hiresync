@@ -36,13 +36,14 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
   downloading = signal(false);
 
   // ── State ────────────────────────────────────────────────────────────────────
-  result    = signal<CVOptimizationResult | null>(null);
-  status    = signal<OptimizationStatus>('queued');
-  steps     = signal<ProcessStep[]>([
+  result         = signal<CVOptimizationResult | null>(null);
+  status         = signal<OptimizationStatus>('queued');
+  activeProvider = signal('');   // set from WebSocket event when optimization completes
+  steps          = signal<ProcessStep[]>([
     { label: 'Vérification de la compatibilité profil ↔ offre', status: 'pending' },
     { label: 'Analyse de l\'offre et extraction des mots-clés ATS', status: 'pending' },
-    { label: 'Réécriture des sections par l\'IA (Gemma 4 31B)', status: 'pending' },
-    { label: 'Calcul du score ATS final',                   status: 'pending' },
+    { label: 'Réécriture des sections par l\'IA',                status: 'pending' },
+    { label: 'Calcul du score ATS final',                        status: 'pending' },
   ]);
 
   // Query params passed from cv-manager when launching a new optimization
@@ -65,6 +66,27 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
     format_improved:  '#8B5CF6',
     skill_added:      '#F59E0B',
   };
+
+  // Fallbacks for any suggestion type the model returns outside the 4 canonical ones.
+  private readonly defaultIcon  = 'auto_fix_high';
+  private readonly defaultColor = '#64748B';
+
+  /** Map any LLM-returned type onto a canonical type so styling is always applied. */
+  private canonicalType(type: string): string {
+    const t = (type ?? '').toLowerCase();
+    if (t.includes('keyword')) return 'keyword_added';
+    if (t.includes('skill') || t.includes('competenc')) return 'skill_added';
+    if (t.includes('rewrit') || t.includes('summary') || t.includes('section') || t.includes('content')) return 'section_rewritten';
+    if (t.includes('format') || t.includes('structure') || t.includes('contact') || t.includes('layout')) return 'format_improved';
+    return '';   // truly unknown → use neutral default
+  }
+
+  changeIcon(type: string): string {
+    return this.changeIcons[type] ?? this.changeIcons[this.canonicalType(type)] ?? this.defaultIcon;
+  }
+  changeColor(type: string): string {
+    return this.changeColors[type] ?? this.changeColors[this.canonicalType(type)] ?? this.defaultColor;
+  }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
   ngOnInit(): void {
@@ -131,6 +153,7 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
     ).subscribe(event => {
       if (event.optimizationId !== this.id) return;   // not our job
       if (event.status === 'completed') {
+        if (event.provider) this.activeProvider.set(event.provider);
         this.cancel$.next();   // stop polling
         this._loadResult();
       } else if (event.status === 'rejected') {
@@ -236,6 +259,6 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
       format_improved:  'Format amélioré',
       skill_added:      'Compétence ajoutée',
     };
-    return map[type] ?? type;
+    return map[type] ?? map[this.canonicalType(type)] ?? 'Amélioration';
   }
 }
