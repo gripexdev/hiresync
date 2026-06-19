@@ -205,7 +205,34 @@ $accent:  #17A589;
 }
 
 // ── Responsive: let the table scroll on small screens ────────────────────────────
+// The table has 7 columns and won't fit a phone width, so it scrolls horizontally
+// inside its own card. To keep it usable: the "Poste ciblé" column (the one piece
+// of context the user actually needs while scanning) stays pinned via sticky
+// positioning, and a fading edge hints that more columns are scrollable.
 @media (max-width: 760px) {
-  .hist-table-card { overflow-x: auto; }
+  .hist-table-card {
+    overflow-x: auto;
+    position: relative;
+
+    &::after {
+      content: '';
+      position: absolute; top: 0; right: 0; bottom: 0; width: 24px;
+      background: linear-gradient(to right, transparent, rgba(0,0,0,.06));
+      pointer-events: none;
+    }
+  }
   .hist-table { min-width: 720px; }
+
+  .hist-table thead th:first-child,
+  .hist-table tbody td.td-job {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: #fff;
+    box-shadow: 1px 0 0 #E2E8F0;
+  }
+  .hist-table thead th:first-child { background: #F8FAFC; }
+  .hist-table tbody tr.tr-failed   td.td-job { background: #FEF7F7; }
+  .hist-table tbody tr.tr-rejected td.td-job { background: #FFFCF5; }
+  .hist-table tbody tr:hover       td.td-job { background: #F8FAFC; }
 }

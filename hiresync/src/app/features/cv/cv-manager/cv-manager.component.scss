@@ -82,7 +82,7 @@ $primary: #2E86AB; $accent: #17A589;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
   gap: 20px; align-items: start;
-  @media (max-width: 560px) { grid-template-columns: 1fr; }
+  @media (max-width: 560px) { grid-template-columns: minmax(0, 1fr); }
 }
 
 .cv-reveal {
@@ -107,6 +107,7 @@ $primary: #2E86AB; $accent: #17A589;
 .cv-card {
   padding: 18px 20px; position: relative;
   display: flex; flex-direction: column;
+  min-width: 0;
   transition: border-color 0.15s, box-shadow 0.2s;
 
   &--active {

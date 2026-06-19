@@ -69,6 +69,18 @@ $hiresync-theme: mat.m2-define-light-theme((
 
 @include mat.all-component-themes($hiresync-theme);
 
+// ── Z-index scale ─────────────────────────────────────────────────────────────
+// Angular Material's CDK overlay (mat-select/mat-menu/mat-dialog/snackbar/tooltip
+// panels) is always appended to <body> at z-index 1000. Every custom overlay we
+// build ourselves (mobile nav drawer, slide-up filter panels, detail modals) MUST
+// stay below that, or a dropdown/menu opened from inside/behind it renders hidden
+// underneath instead of on top. Use these tokens instead of hardcoding numbers.
+:root {
+  --z-backdrop:  500; // dimmed background behind a custom drawer/panel/modal
+  --z-overlay:   510; // the drawer/panel/modal itself, above its own backdrop
+  --z-fixed-ui:  520; // persistent fixed buttons not tied to a backdrop (e.g. hamburger)
+}
+
 // ── Base Resets ───────────────────────────────────────────────────────────────
 *, *::before, *::after { box-sizing: border-box; }
 

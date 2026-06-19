@@ -36,12 +36,9 @@ $primary: #2E86AB; $accent: #17A589;
   @media (max-width: 900px) { display: flex; }
 }
 
-// z-index kept BELOW Angular Material's CDK overlay container (z-index: 1000,
-// used by mat-select/mat-menu/mat-dialog/snackbar) so dropdowns opened from
-// inside this panel always render above it instead of being hidden behind it.
 .filter-backdrop {
   position: fixed; inset: 0; background: rgba(0,0,0,.4);
-  z-index: 500; animation: fadeIn 0.2s ease;
+  z-index: var(--z-backdrop); animation: fadeIn 0.2s ease;
 }
 
 // ── Filter sidebar ─────────────────────────────────────────────────────────────
@@ -76,7 +73,7 @@ $primary: #2E86AB; $accent: #17A589;
     position: fixed;
     inset: auto 0 0 0;
     top: auto;
-    z-index: 501;
+    z-index: var(--z-overlay);
     max-height: 85vh;
     overflow-y: auto;
     border-radius: 20px 20px 0 0;

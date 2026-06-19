@@ -3,26 +3,6 @@
   height: 100vh;
 }
 
-// ── Mobile drawer ──────────────────────────────────────────────────────────────
-// Below 900px the fixed-width sidebar no longer fits alongside page content, so
-// it becomes an off-canvas drawer toggled by the hamburger button in app-shell.
-@media (max-width: 900px) {
-  :host { width: 0; height: 0; }
-
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 1001;
-    width: 240px;
-    transform: translateX(-100%);
-    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-
-    &--collapsed { width: 240px; }
-    &--mobile-open { transform: translateX(0); }
-  }
-}
-
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -237,5 +217,31 @@
 
     &:hover { background: #FEE2E2; color: #EF4444; }
     mat-icon { font-size: 18px; width: 18px; height: 18px; flex-shrink: 0; }
+  }
+}
+
+// ── Mobile drawer ──────────────────────────────────────────────────────────────
+// Below 900px the fixed-width sidebar no longer fits alongside page content, so
+// it becomes an off-canvas drawer toggled by the hamburger button in app-shell.
+// Placed AFTER the base .sidebar block so its `&__toggle { display: none }`
+// (same specificity as the base rule) wins the cascade by source order.
+@media (max-width: 900px) {
+  :host { width: 0; height: 0; }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: var(--z-overlay);
+    width: 240px;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &--collapsed { width: 240px; }
+    &--mobile-open { transform: translateX(0); }
+
+    // The collapse toggle has no effect in drawer mode (app-shell always forces
+    // collapsed=false while the drawer is open) — hide it so it doesn't look broken.
+    &__toggle { display: none; }
   }
 }

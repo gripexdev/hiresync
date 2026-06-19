@@ -39,7 +39,7 @@ import { TopbarComponent } from '../shared/components/topbar/topbar.component';
         position: fixed;
         inset: 0;
         background: rgba(15, 23, 42, .4);
-        z-index: 1000;
+        z-index: var(--z-backdrop);
       }
 
       .mobile-menu-btn {
@@ -49,7 +49,7 @@ import { TopbarComponent } from '../shared/components/topbar/topbar.component';
         position: fixed;
         top: 12px;
         left: 12px;
-        z-index: 999;
+        z-index: var(--z-fixed-ui);
         width: 40px;
         height: 40px;
         border: 1px solid #E2E8F0;

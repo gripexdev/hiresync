@@ -11,16 +11,18 @@ $dark:    #1B4F72;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px; // floor so brand & actions never touch if space-between runs out of room
   padding: 0 40px;
-  height: 64px;
+  min-height: 64px;
   background: rgba(255,255,255,0.92);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid #E2E8F0;
 
-  &__brand { display: flex; align-items: center; gap: 10px; }
-  &__actions { display: flex; align-items: center; gap: 16px; }
+  &__brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  &__actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 
-  @media (max-width: 600px) { padding: 0 16px; }
+  @media (max-width: 600px) { padding: 8px 16px; }
 }
 
 .brand-icon {

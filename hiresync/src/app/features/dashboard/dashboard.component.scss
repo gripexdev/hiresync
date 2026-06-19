@@ -62,14 +62,18 @@ $accent:  #17A589;
   grid-template-columns: 1fr 380px;
   gap: 24px;
   align-items: start;
+  min-width: 0;
 
   @media (max-width: 1100px) { grid-template-columns: 1fr; }
 }
 
-.dash-side { display: flex; flex-direction: column; gap: 20px; }
+.dash-side { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 
 .dash-card {
   padding: 20px;
+  min-width: 0; // grid/flex items default to min-content sizing — without this,
+                // the long nowrap job-title text below forces this card (and the
+                // 1fr grid track) wider than the viewport instead of ellipsizing
 
   &__header {
     display: flex;
@@ -115,7 +119,7 @@ $accent:  #17A589;
 
   &__info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
   &__title { font-size: 14px; font-weight: 600; color: #1A202C; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  &__company { font-size: 12px; color: #64748B; }
+  &__company { font-size: 12px; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   &__meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 }
 
