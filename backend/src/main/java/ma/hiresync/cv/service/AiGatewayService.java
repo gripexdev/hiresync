@@ -69,13 +69,17 @@ public class AiGatewayService {
      * Generate a professional French cover letter / application email tailored to
      * the job, grounded in the candidate's (optimized) CV. Returns raw JSON
      * {"subject": "...", "body": "..."} as the AiResult content.
+     *
+     * @param candidateName the account holder's real full name, or null/blank if
+     *                       unknown — used to sign the letter instead of a placeholder.
      */
-    public AiResult generateCoverLetter(String cvText, String jobTitle, String company, String jobDescription) {
+    public AiResult generateCoverLetter(String cvText, String jobTitle, String company,
+                                         String jobDescription, String candidateName) {
         String system =
             "You are an expert career writer. You write concise, sincere, professional French cover "
           + "letters that read naturally (never robotic or generic). You respond ONLY with a single "
           + "valid JSON object, no markdown, no commentary.";
-        return route(system, buildCoverLetterPrompt(cvText, jobTitle, company, jobDescription),
+        return route(system, buildCoverLetterPrompt(cvText, jobTitle, company, jobDescription, candidateName),
                      1100, 0.6, Set.of());
     }
 
@@ -235,7 +239,18 @@ public class AiGatewayService {
             );
     }
 
-    private String buildCoverLetterPrompt(String cvText, String jobTitle, String company, String jobDescription) {
+    private String buildCoverLetterPrompt(String cvText, String jobTitle, String company,
+                                           String jobDescription, String candidateName) {
+        boolean hasName = candidateName != null && !candidateName.isBlank();
+        // French cover-letter convention: the closing formula is followed by the
+        // candidate's full real name on its own line — never a first name alone or
+        // an abbreviation. Only fall back to a placeholder when we truly don't know it.
+        String signatureRule = hasName
+            ? "Sign the letter with the candidate's EXACT real name on its own line after the closing "
+            + "formula: \"%s\". Do not alter, translate, or abbreviate it.".formatted(candidateName)
+            : "We don't have the candidate's real name — sign with the placeholder \"[Votre nom]\" on its "
+            + "own line after the closing formula.";
+
         return """
             Write a professional cover letter / application email IN FRENCH for this candidate applying
             to the target job. It must be ready to send: the candidate will paste it into an email or
@@ -258,8 +273,8 @@ public class AiGatewayService {
             - 3 short paragraphs max: (1) why this role/company, (2) the 2-3 most relevant strengths
               tied to the job's needs, (3) a courteous call to action (availability for an interview).
             - Reference the actual job title and company. Use real skills/experience from the CV.
-            - The "body" must include a greeting (e.g. "Madame, Monsieur,") and a sign-off, but use the
-              placeholder "[Votre nom]" for the signature (we don't always have the real name).
+            - The "body" must include a greeting (e.g. "Madame, Monsieur,") and end with a polite closing
+              formula (e.g. "Cordialement,"). %s
             - The "subject" is a concise email subject line in French (e.g. "Candidature — <poste>").
             - Keep the whole body under ~220 words.
 
@@ -272,7 +287,8 @@ public class AiGatewayService {
                 cvText == null ? "" : cvText.substring(0, Math.min(cvText.length(), 3500)),
                 jobTitle == null ? "" : jobTitle,
                 company == null ? "" : company,
-                jobDescription == null ? "" : jobDescription.substring(0, Math.min(jobDescription.length(), 1500))
+                jobDescription == null ? "" : jobDescription.substring(0, Math.min(jobDescription.length(), 1500)),
+                signatureRule
             );
     }
 

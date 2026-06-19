@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import ma.hiresync.auth.entity.User;
 import ma.hiresync.auth.repository.UserRepository;
 import ma.hiresync.cv.dto.*;
 import ma.hiresync.cv.entity.Cv;
@@ -409,7 +410,11 @@ public class CvService {
         String company = job != null && job.getCompany() != null ? job.getCompany() : optim.getCompany();
         String jobDesc = job != null && job.getDescription() != null ? job.getDescription() : "";
 
-        var result = aiGateway.generateCoverLetter(cvText, optim.getJobTitle(), company, jobDesc);
+        // The account's registered full name is always present (required at sign-up) —
+        // a more reliable source than re-extracting a name from CV text via the LLM.
+        String candidateName = userRepo.findById(userId).map(User::getFullName).orElse(null);
+
+        var result = aiGateway.generateCoverLetter(cvText, optim.getJobTitle(), company, jobDesc, candidateName);
 
         // Normalise to a clean {subject, body} JSON and cache it
         CoverLetterResponse letter = parseCoverLetter(result.content(), result.provider());
