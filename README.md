@@ -491,12 +491,42 @@ JobService.triggerScrape()
 
 ---
 
-### 4.5 Notifications WebSocket (STOMP)
+### 4.5 Notifications
+
+HireSync combine **deux mécanismes complémentaires** :
+
+1. **Notifications persistées** (la cloche du bandeau + page `/notifications`) — stockées en base, déclenchées par de vrais événements produit, servies en REST paginé.
+2. **Événement WebSocket live** (STOMP) — éphémère, écouté uniquement par la page d'optimisation pour réagir en temps réel.
+
+#### 4.5.1 Notifications persistées (cloche + page)
+
+**Ce qui a été ajouté :**
+- `notification/entity/Notification.java` — entité JPA (`notifications`) : `userId`, `type`, `title`, `message`, `link`, `read`, `createdAt` (indexée sur `user_id, created_at` et `user_id, read`)
+- `notification/entity/NotificationType.java` — enum sérialisé en minuscules (`@JsonValue`) pour coller au type Angular : `cv_optimized`, `cv_rejected`, `cv_failed`, `application_update`, `interview_scheduled`, `offer_received`
+- `notification/repository/NotificationRepository.java` — `findByUserIdOrderByCreatedAtDesc` (paginé), `countByUserIdAndReadFalse`, `markAllReadForUser`
+- `notification/NotificationService.java` — `create()`, `list()` (paginé), `unreadCount()`, `markRead()`, `markAllRead()`
+- `notification/NotificationController.java` — REST paginé (voir §6)
+- Front : `notification.service.ts` réécrit (vrai HTTP, plus de mock) ; signal partagé `unreadCount` qui pilote le badge de la cloche dans `topbar`
+
+**Événements qui génèrent une notification :**
+
+| Événement (backend) | Type | Lien |
+|---------------------|------|------|
+| Optimisation CV terminée (`OptimizationConsumer`) | `cv_optimized` | `/cv/optimize/{id}` |
+| Optimisation refusée (profil incompatible) | `cv_rejected` | `/cv/optimize/{id}` |
+| Optimisation échouée (fournisseurs IA indisponibles) | `cv_failed` | `/cv/optimize/{id}` |
+| Candidature passée à "Entretien" (`ApplicationService.updateStatus`) | `interview_scheduled` | `/applications` |
+| Candidature passée à "Offre" | `offer_received` | `/applications` |
+| Tout autre changement de statut | `application_update` | `/applications` |
+
+La création est faite dans la même transaction que l'événement métier (le consumer RabbitMQ et `updateStatus` sont `@Transactional`), donc une notification n'est jamais orpheline d'un changement non commité. Le badge de la cloche se rafraîchit depuis l'endpoint `GET /api/notifications/unread-count` au chargement et après chaque lecture.
+
+#### 4.5.2 Événement WebSocket live (page d'optimisation)
 
 **Ce qui a été ajouté :**
 - `WebSocketConfig.java` — configure Spring WebSocket avec STOMP, endpoint `/ws/notifications`, SockJS
-- `NotificationService.java` — pousse des événements via `SimpMessagingTemplate.convertAndSendToUser()`
-- `WebSocketService.ts` — service Angular qui connecte via SockJS + STOMP, souscrit aux topics
+- `NotificationService.pushCvOptimizationEvent()` — pousse des événements via `SimpMessagingTemplate.convertAndSendToUser()`
+- `WebSocketService.ts` — service Angular qui connecte via WebSocket natif + STOMP, souscrit aux topics
 
 **Comment ça marche :**
 
@@ -520,8 +550,7 @@ Spring Boot (NotificationService)          Angular (WebSocketService)
 **Topics utilisés :**
 | Topic | Émis quand |
 |-------|-----------|
-| `/user/topic/cv-optimization` | Optimisation en cours, terminée ou échouée |
-| `/user/topic/notifications` | Réservé pour futures notifications (offres matchées…) |
+| `/user/topic/cv-optimization` | Optimisation en cours, terminée ou échouée (consommé par la page optimiseur) |
 
 **Fallback polling :**  
 Si le WebSocket n'est pas connecté (réseau instable, firewall…), Angular interroge `GET /api/cv/optimize/{id}` toutes les **3 secondes** jusqu'à `status === "completed"`. Le polling s'arrête automatiquement quand le WebSocket envoie le résultat.
@@ -619,24 +648,24 @@ Si le CV uploadé est mal parsé (texte brut non structuré), l'utilisateur peut
 
 ---
 
-### 4.8 Frontend Angular — 10 pages
+### 4.8 Frontend Angular — 12 pages
 
 | Page | Route | Données |
 |------|-------|---------|
 | Landing | `/` | Statique — présentation de la plateforme |
 | Login | `/login` | `POST /api/auth/login` → JWT |
 | Register | `/register` | `POST /api/auth/register` → JWT |
-| Dashboard | `/dashboard` | Stats candidatures + notifications récentes (mock job/app data) |
+| **Dashboard** | `/dashboard` | **RÉEL** — stats candidatures + notifications récentes (backend) |
 | **Recherche offres** | `/jobs` | **RÉEL** — offres scrapées depuis rekrute.com + emploi.ma + Indeed + LinkedIn, pagination, filtres, barre admin |
 | **Détail offre** | `/jobs/:id` | **RÉEL** — description enrichie structurée, compétences, bouton "Optimiser CV" |
-| **Mon CV** | `/cv` | **RÉEL** — upload PDF, ATS réel, sections extraites, historique |
+| **Mon CV** | `/cv` | **RÉEL** — upload PDF, ATS réel, sections extraites, historique, pagination "Afficher plus" |
 | **Optimizer** | `/cv/optimize/:id` | **RÉEL** — loading IA animé (4 étapes, modèle réel affiché), résultat IA (avant/après, mots-clés ATS), état rejeté (profil incompatible), état échec |
 | **CV Studio** | `/cv/studio/:id` | **RÉEL** — template designer, photo, live preview, export PDF vectoriel |
-| Candidatures | `/applications` | Kanban (mock data) |
-| Notifications | `/notifications` | Mock data |
+| **Historique** | `/cv/history` | **RÉEL** — historique paginé + filtres + recherche debouncée + stats agrégées |
+| **Candidatures** | `/applications` | **RÉEL** — Kanban paginé par colonne (drag & drop optimiste) + vue tableau paginée |
+| **Notifications** | `/notifications` | **RÉEL** — notifications persistées, badge cloche, marquer lu / tout lu |
 
-> **Pages en gras = connectées au backend réel.**  
-> Les autres pages utilisent des données mock — prêtes à être connectées au fur et à mesure que le backend est développé.
+> **Toutes les pages sont désormais connectées au backend réel** (plus de données mock).
 
 **Intercepteur JWT global :**  
 Tous les appels HTTP Angular ont automatiquement le header `Authorization: Bearer <token>` grâce à `authInterceptor`. Si le serveur répond 401/403, l'intercepteur déconnecte automatiquement l'utilisateur et le redirige vers `/login`.
@@ -1470,6 +1499,25 @@ const profilText = desc.slice(idx + marker.length); // → section Profil
 
 Le nombre total d'offres en base grossit à chaque scraping. Charger toutes les offres en une seule requête serait inefficace. La pagination est entièrement gérée par **Spring Data** (`Page<T>`) et mappée côté Angular.
 
+#### Toutes les listes sont paginées côté serveur
+
+À l'origine seule la recherche d'offres était paginée côté serveur. Désormais **toutes** les listes le sont — chaque écran ne charge que ce qu'il affiche :
+
+| Écran | Endpoint | Stratégie UI |
+|-------|----------|--------------|
+| Offres (`/jobs`) | `GET /api/jobs?q=&page=&size=` | Barre de pagination numérotée (ellipsis) |
+| Candidatures — vue Kanban (`/applications`) | `GET /api/applications?status=&page=&size=` | Une pagination **indépendante par colonne** de statut ("Voir N de plus"), chargées en parallèle (`forkJoin`) |
+| Candidatures — vue Tableau | `GET /api/applications?page=&size=` | Barre `<app-paginator>` (chargée à la 1ʳᵉ ouverture de l'onglet) |
+| Historique optimisations (`/cv/history`) | `GET /api/cv/optimization-history?status=&q=&page=&size=` | Barre `<app-paginator>` + filtres + recherche debouncée (350 ms) ; stats agrégées via `/optimization-history/stats` |
+| Mon CV (`/cv`) | `GET /api/cv/versions?page=&size=` | "Afficher N de plus" incrémental (le CV actif reste épinglé en tête) |
+
+**Mutualisation :**
+- Modèle partagé `core/models/page.model.ts` — `Page<T>` mappe l'enveloppe Spring (`content`, `totalElements`, `totalPages`, `number`, `size`, `first`, `last`)
+- Composant réutilisable `shared/components/paginator/paginator.component.ts` — barre numérotée + sélecteur "par page", piloté par `[total] [page] [pageSize]` et `(pageChange) (pageSizeChange)`
+- Côté backend, chaque finder renvoie un `Page<T>` (`PageRequest.of(page, size, Sort…)`), avec filtres optionnels (`status`, `q`) gérés en JPQL
+
+Le déplacement d'une carte Kanban (drag & drop ou menu) est **optimiste** : la carte change de colonne immédiatement et les totaux sont ajustés localement, avec rollback si l'appel serveur échoue.
+
 #### Backend — Spring Data Page
 
 ```java
@@ -1610,13 +1658,31 @@ curl -H "Authorization: Bearer <token>" http://localhost:8080/api/cv/versions
 ### CV
 | Méthode | URL | Description |
 |---------|-----|-------------|
-| GET | `/api/cv/versions` | Lister tous les CVs de l'utilisateur |
+| GET | `/api/cv/versions` | Lister les CVs (paginé : `?page=&size=`, CV actif en tête) |
 | POST | `/api/cv/upload` | Uploader un CV (multipart PDF/Word) → extraction PDFBox + score ATS |
 | PATCH | `/api/cv/{id}/activate` | Définir ce CV comme CV actif |
 | DELETE | `/api/cv/{id}` | Supprimer un CV |
 | POST | `/api/cv/optimize` | Lancer l'optimisation IA (async RabbitMQ) → retourne `{optimizationId}` |
 | GET | `/api/cv/optimize/{id}` | Consulter le résultat d'une optimisation (polling fallback WebSocket) |
-| GET | `/api/cv/optimization-history` | Historique des optimisations |
+| GET | `/api/cv/optimization-history` | Historique paginé + filtré : `?status=&q=&page=&size=` |
+| GET | `/api/cv/optimization-history/stats` | Agrégats (total, completed, rejected, failed, avgGain, bestScore) |
+
+### Candidatures (authentification requise)
+| Méthode | URL | Paramètres / Body | Description |
+|---------|-----|-------------------|-------------|
+| GET | `/api/applications` | `?status=&page=&size=` | Liste paginée — `status` filtre une colonne Kanban, sinon liste complète |
+| GET | `/api/applications/stats` | — | Compteurs par statut |
+| POST | `/api/applications/{jobId}` | `{cvId, coverNote?}` | Postuler à une offre avec un CV |
+| POST | `/api/applications/{jobId}/mark-applied` | `{cvId}` | Marquer "postulé" (idempotent) |
+| PATCH | `/api/applications/{id}/status` | `{status}` | Changer le statut → génère une notification |
+
+### Notifications (authentification requise)
+| Méthode | URL | Paramètres | Description |
+|---------|-----|-----------|-------------|
+| GET | `/api/notifications` | `?page=&size=` | Notifications paginées, plus récentes d'abord |
+| GET | `/api/notifications/unread-count` | — | `{count}` — pilote le badge de la cloche |
+| POST | `/api/notifications/{id}/read` | — | Marquer une notification lue |
+| POST | `/api/notifications/read-all` | — | Tout marquer comme lu → `{updated}` |
 
 ### Jobs (public — sans authentification)
 | Méthode | URL | Paramètres | Description |
@@ -1722,7 +1788,20 @@ backend/src/main/java/ma/hiresync/
 │       └── JobEnrichmentService.java        Pages détail, extraction aiguillée par source (description + requirements)
 │
 ├── notification/
-│   └── NotificationService.java             convertAndSendToUser → Angular WebSocket
+│   ├── entity/
+│   │   ├── Notification.java                Entité JPA (notifications : type, title, message, link, read, createdAt)
+│   │   └── NotificationType.java            Enum sérialisé en minuscules (cv_optimized, application_update…)
+│   ├── repository/NotificationRepository.java  findByUserId paginé, countByUserIdAndReadFalse, markAllReadForUser
+│   ├── dto/NotificationResponse.java        DTO aligné sur le modèle Angular
+│   ├── NotificationService.java             create/list/unreadCount/markRead + push WebSocket live
+│   └── NotificationController.java          REST paginé (/api/notifications)
+│
+├── application/
+│   ├── entity/JobApplication.java           Candidature (status, jobTitle, company, matchScore…)
+│   ├── repository/JobApplicationRepository.java  finders paginés par userId / statut
+│   ├── dto/                                 ApplicationResponse, ApplyRequest, UpdateStatusRequest, ApplicationStatsResponse
+│   ├── service/ApplicationService.java      apply, updateStatus (→ notification), pagination + live match score
+│   └── controller/ApplicationController.java  REST candidatures (paginé)
 │
 └── config/
     ├── SecurityConfig.java                  Spring Security (JWT, CORS, GET /api/jobs public)

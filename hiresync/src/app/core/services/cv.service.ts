@@ -1,13 +1,24 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpEventType, HttpRequest } from '@angular/common/http';
+import { HttpClient, HttpEventType, HttpRequest, HttpParams } from '@angular/common/http';
 import { Observable, of, delay, map, filter, scan, switchMap, timer, takeUntil, Subject } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   CV, CVOptimizationRequest, CVOptimizationResult,
   CVOptimizationTriggerResponse, CVOptimizationHistoryItem,
-  CVOptimizationWsEvent, CoverLetter,
+  CVOptimizationWsEvent, CoverLetter, OptimizationStatus,
 } from '../models/cv.model';
 import { StructuredCv } from '../models/studio.model';
+import { Page } from '../models/page.model';
+
+/** Whole-dataset stats for the optimization-history page (cards + filter-tab counts). */
+export interface HistoryStats {
+  total: number;
+  completed: number;
+  rejected: number;
+  failed: number;
+  avgGain: number;
+  bestScore: number;
+}
 
 // ── Mock data (replace with real HTTP once backend is ready) ──────────────────
 const MOCK_CVS: CV[] = [
@@ -79,8 +90,18 @@ export class CvService {
   constructor(private http: HttpClient) {}
 
   // ── GET /api/cv/versions ──────────────────────────────────────────────────
+  /** Server-side paginated CVs (active pinned first). */
+  getPage(page: number, size: number): Observable<Page<CV>> {
+    const params = new HttpParams().set('page', page).set('size', size);
+    return this.http.get<Page<CV>>(`${this.base}/versions`, { params });
+  }
+
+  /**
+   * All CVs as a flat list — for selectors/dropdowns (apply dialog, job detail)
+   * that need the full set, not a paged view. Backed by the paginated endpoint.
+   */
   getAll(): Observable<CV[]> {
-    return this.http.get<CV[]>(`${this.base}/versions`);
+    return this.getPage(0, 100).pipe(map(p => p.content));
   }
 
   // ── POST /api/cv/upload  (multipart, with progress events) ────────────────
@@ -142,8 +163,26 @@ export class CvService {
       `${this.base}/optimize/${id}/cover-letter?regenerate=${regenerate}`, {});
   }
 
-  getOptimizationHistory(): Observable<CVOptimizationHistoryItem[]> {
-    return this.http.get<CVOptimizationHistoryItem[]>(`${this.base}/optimization-history`);
+  /**
+   * GET /api/cv/optimization-history — server-side paginated + filtered history.
+   * `status` filters by outcome (completed/rejected/failed…); `q` is a free-text
+   * search on job title / company.
+   */
+  getHistoryPage(opts: {
+    status?: OptimizationStatus | 'all' | null;
+    q?: string;
+    page: number;
+    size: number;
+  }): Observable<Page<CVOptimizationHistoryItem>> {
+    let params = new HttpParams().set('page', opts.page).set('size', opts.size);
+    if (opts.status && opts.status !== 'all') params = params.set('status', opts.status);
+    if (opts.q?.trim()) params = params.set('q', opts.q.trim());
+    return this.http.get<Page<CVOptimizationHistoryItem>>(`${this.base}/optimization-history`, { params });
+  }
+
+  /** GET /api/cv/optimization-history/stats — whole-dataset stats (cards + tab counts). */
+  getHistoryStats(): Observable<HistoryStats> {
+    return this.http.get<HistoryStats>(`${this.base}/optimization-history/stats`);
   }
 
   /**

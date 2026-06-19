@@ -1,0 +1,71 @@
+$primary: #2E86AB;
+
+.hs-paginator {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  padding: 14px 18px; margin-top: 16px;
+  background: #fff; border: 1px solid #EAEEF3; border-radius: 14px;
+
+  &__info {
+    font-size: 13px; color: #64748B;
+    strong { color: #1A202C; font-weight: 700; }
+  }
+
+  &__controls {
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  }
+
+  &__size {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13px; color: #64748B;
+
+    select {
+      appearance: none;
+      padding: 6px 28px 6px 10px;
+      border: 1px solid #D7DEE6; border-radius: 9px;
+      background: #fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") no-repeat right 8px center;
+      font-size: 13px; font-weight: 600; color: #1A202C; cursor: pointer;
+      transition: border-color .15s, box-shadow .15s;
+      &:hover  { border-color: #B9C4D0; }
+      &:focus  { outline: none; border-color: $primary; box-shadow: 0 0 0 3px rgba(46,134,171,.14); }
+    }
+  }
+
+  &__pages {
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+}
+
+.pg-btn, .pg-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 34px; height: 34px; padding: 0 6px;
+  border: 1px solid #E2E8F0; border-radius: 9px;
+  background: #fff; color: #475569;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: all .15s;
+
+  &:hover:not(:disabled):not(.pg-num--active) {
+    border-color: $primary; color: $primary; background: rgba(46,134,171,.06);
+  }
+  &:disabled { opacity: .4; cursor: not-allowed; }
+
+  mat-icon { font-size: 19px; width: 19px; height: 19px; }
+}
+
+.pg-num--active {
+  background: $primary; border-color: $primary; color: #fff;
+  box-shadow: 0 2px 8px rgba(46,134,171,.3);
+  cursor: default;
+}
+
+.pg-ellipsis {
+  min-width: 22px; text-align: center; color: #94A3B8; font-weight: 700;
+  user-select: none;
+}
+
+@media (max-width: 560px) {
+  .hs-paginator {
+    flex-direction: column; align-items: stretch; gap: 12px;
+    &__controls { justify-content: space-between; }
+  }
+}

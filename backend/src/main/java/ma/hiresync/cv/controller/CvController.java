@@ -4,7 +4,10 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import ma.hiresync.auth.service.JwtService;
 import ma.hiresync.cv.dto.*;
+import ma.hiresync.cv.entity.CvOptimization.OptimizationStatus;
 import ma.hiresync.cv.service.CvService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -12,7 +15,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -24,12 +26,14 @@ public class CvController {
     private final JwtService       jwtService;
     private final ma.hiresync.cv.service.PdfRenderService pdfRenderService;
 
-    /** GET /api/cv/versions — list all CVs for the authenticated user */
+    /** GET /api/cv/versions — server-side paginated CVs (active pinned first). */
     @GetMapping("/versions")
-    public ResponseEntity<List<CvResponse>> getVersions(
+    public ResponseEntity<Page<CvResponse>> getVersions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
             @RequestHeader("Authorization") String authHeader) {
         UUID userId = extractUserId(authHeader);
-        return ResponseEntity.ok(cvService.getAllCvs(userId));
+        return ResponseEntity.ok(cvService.getAllCvs(userId, PageRequest.of(page, size)));
     }
 
     /**
@@ -113,12 +117,38 @@ public class CvController {
         return ResponseEntity.ok(cvService.generateCoverLetter(id, userId, regenerate));
     }
 
-    /** GET /api/cv/optimization-history */
+    /**
+     * GET /api/cv/optimization-history — server-side paginated + filtered history.
+     * Optional {@code status} (completed / rejected / failed / queued / processing)
+     * and {@code q} free-text search on job title / company.
+     */
     @GetMapping("/optimization-history")
-    public ResponseEntity<List<OptimizationResponse>> getHistory(
+    public ResponseEntity<Page<OptimizationResponse>> getHistory(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
             @RequestHeader("Authorization") String authHeader) {
         UUID userId = extractUserId(authHeader);
-        return ResponseEntity.ok(cvService.getHistory(userId));
+        return ResponseEntity.ok(
+                cvService.getHistory(userId, parseOptStatus(status), q, PageRequest.of(page, size)));
+    }
+
+    /** GET /api/cv/optimization-history/stats — whole-dataset stats for cards + tabs. */
+    @GetMapping("/optimization-history/stats")
+    public ResponseEntity<HistoryStatsResponse> getHistoryStats(
+            @RequestHeader("Authorization") String authHeader) {
+        return ResponseEntity.ok(cvService.getHistoryStats(extractUserId(authHeader)));
+    }
+
+    /** Parse an optional optimization-status filter; null / blank / "all" means no filter. */
+    private static OptimizationStatus parseOptStatus(String raw) {
+        if (raw == null || raw.isBlank() || raw.equalsIgnoreCase("all")) return null;
+        try {
+            return OptimizationStatus.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Statut invalide : " + raw);
+        }
     }
 
     /**

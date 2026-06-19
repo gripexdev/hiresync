@@ -37,6 +37,8 @@ export class DashboardComponent implements OnInit {
   readonly notifIcons: Record<string, string> = {
     job_match:           'hub',
     cv_optimized:        'auto_awesome',
+    cv_rejected:         'block',
+    cv_failed:           'error_outline',
     application_update:  'track_changes',
     interview_scheduled: 'calendar_today',
     offer_received:      'celebration',
@@ -44,7 +46,7 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit(): void {
     this.appService.getStats().subscribe(s => this.stats.set(s));
-    this.appService.getAll().subscribe(a => { this.applications.set(a.slice(0, 5)); this.loading.set(false); });
+    this.appService.getPage({ page: 0, size: 5 }).subscribe(p => { this.applications.set(p.content); this.loading.set(false); });
     this.notifService.getAll().subscribe(n => this.notifications.set(n.slice(0, 5)));
   }
 }

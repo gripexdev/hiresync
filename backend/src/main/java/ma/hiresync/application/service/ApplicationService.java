@@ -15,11 +15,14 @@ import ma.hiresync.cv.repository.CvRepository;
 import ma.hiresync.cv.service.AtsScorer;
 import ma.hiresync.job.entity.Job;
 import ma.hiresync.job.repository.JobRepository;
+import ma.hiresync.notification.NotificationService;
+import ma.hiresync.notification.entity.NotificationType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -33,6 +36,7 @@ public class ApplicationService {
     private final CvRepository             cvRepo;
     private final CvOptimizationRepository optimRepo;
     private final AtsScorer                atsScorer;
+    private final NotificationService      notificationSvc;
 
     /** Apply to a job with a chosen CV. Snapshots job + CV details at apply time. */
     public ApplicationResponse apply(UUID userId, UUID jobId, ApplyRequest req) {
@@ -108,21 +112,56 @@ public class ApplicationService {
             throw new IllegalArgumentException("Statut invalide : " + statusRaw);
         }
 
+        ApplicationStatus previous = application.getStatus();
         application.setStatus(newStatus);
         application.setUpdatedAt(Instant.now());
         appRepo.save(application);
         log.info("User {} updated application {} → status {}", userId, applicationId, newStatus);
+
+        if (newStatus != previous) {
+            notifyStatusChange(userId, application, newStatus);
+        }
         return ApplicationResponse.from(application);
     }
 
+    /** Raise an in-app notification when an application moves to a new stage. */
+    private void notifyStatusChange(UUID userId, JobApplication app, ApplicationStatus status) {
+        NotificationType type;
+        String title;
+        switch (status) {
+            case INTERVIEW -> { type = NotificationType.INTERVIEW_SCHEDULED; title = "Entretien programmé"; }
+            case OFFER     -> { type = NotificationType.OFFER_RECEIVED;      title = "Offre reçue !"; }
+            default        -> { type = NotificationType.APPLICATION_UPDATE;  title = "Candidature mise à jour"; }
+        }
+        String message = String.format("« %s » chez %s : %s.",
+                app.getJobTitle(),
+                app.getCompany() != null ? app.getCompany() : "l'entreprise",
+                statusLabel(status));
+        notificationSvc.create(userId, type, title, message, "/applications");
+    }
+
+    private static String statusLabel(ApplicationStatus status) {
+        return switch (status) {
+            case APPLIED   -> "candidature envoyée";
+            case IN_REVIEW -> "en cours d'examen";
+            case INTERVIEW -> "entretien programmé";
+            case OFFER     -> "offre reçue";
+            case REJECTED  -> "candidature refusée";
+        };
+    }
+
+    /**
+     * Server-side paginated applications. When {@code status} is null the whole list is
+     * paginated (table view); otherwise only that status is returned (a kanban column).
+     * Each page is enriched with the live, job-specific match score so every card
+     * (incl. older ones stored with the generic CV score) reflects the real CV↔job fit.
+     */
     @Transactional(readOnly = true)
-    public List<ApplicationResponse> getMyApplications(UUID userId) {
-        return appRepo.findByUserIdOrderByAppliedAtDesc(userId)
-                .stream()
-                // Enrich with the live, job-specific match score so every card (incl. older
-                // ones stored with the generic CV score) reflects the real CV↔job fit.
-                .map(a -> ApplicationResponse.from(a, liveMatchScore(userId, a)))
-                .toList();
+    public Page<ApplicationResponse> getMyApplications(UUID userId, ApplicationStatus status, Pageable pageable) {
+        Page<JobApplication> page = (status == null)
+                ? appRepo.findByUserId(userId, pageable)
+                : appRepo.findByUserIdAndStatus(userId, status, pageable);
+        return page.map(a -> ApplicationResponse.from(a, liveMatchScore(userId, a)));
     }
 
     /**

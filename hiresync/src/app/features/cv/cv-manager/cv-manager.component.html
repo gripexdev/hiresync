@@ -46,7 +46,7 @@
 } @else {
   <!-- Section header: count + active CV indicator -->
   <div class="cv-list-head">
-    <h2>Mes CV <span class="cv-count">{{ cvs().length }}</span></h2>
+    <h2>Mes CV <span class="cv-count">{{ cvTotal() }}</span></h2>
     <span class="cv-list-head__hint">
       <mat-icon>info_outline</mat-icon>
       Le CV <strong>actif</strong> est celui utilisé par défaut pour vos candidatures.
@@ -54,7 +54,7 @@
   </div>
 
   <div class="cv-grid">
-    @for (cv of cvs(); track cv.id) {
+    @for (cv of visibleCvs(); track cv.id) {
       <div class="hs-card cv-card" [class.cv-card--active]="cv.isActive">
 
         <!-- Header: icon + info + ATS ring -->
@@ -173,17 +173,39 @@
       </div>
     }
   </div>
+
+  <!-- Server-side incremental load: keeps the page short, never hides the active CV -->
+  @if (cvTotal() > CV_PAGE) {
+    <div class="cv-reveal">
+      @if (!allCvsShown()) {
+        <button class="cv-reveal__btn" (click)="showMoreCvs()" type="button" [disabled]="cvLoadingMore()">
+          @if (cvLoadingMore()) {
+            <mat-spinner diameter="16" />
+          } @else {
+            <mat-icon>expand_more</mat-icon>
+          }
+          Afficher {{ hiddenCvCount() }} CV de plus
+        </button>
+      } @else {
+        <button class="cv-reveal__btn cv-reveal__btn--less" (click)="showLessCvs()" type="button">
+          <mat-icon>expand_less</mat-icon>
+          Réduire la liste
+        </button>
+      }
+      <span class="cv-reveal__count">{{ cvs().length }} / {{ cvTotal() }}</span>
+    </div>
+  }
 }
 
 <!-- ── Optimization history → dedicated page ─────────────────────────────────── -->
-@if (history().length > 0) {
+@if (historyCount() > 0) {
   <div class="section-divider">
     <h2><mat-icon>history</mat-icon> Historique des optimisations</h2>
   </div>
   <a routerLink="/cv/history" class="hs-card history-cta">
     <div class="history-cta__icon"><mat-icon>history</mat-icon></div>
     <div class="history-cta__body">
-      <span class="history-cta__title">{{ history().length }} optimisation(s) enregistrée(s)</span>
+      <span class="history-cta__title">{{ historyCount() }} optimisation(s) enregistrée(s)</span>
       <span class="history-cta__sub">Consultez les résultats ATS, les gains et le détail de chaque analyse sur la page dédiée.</span>
     </div>
     <span class="history-cta__action">Voir l'historique <mat-icon>arrow_forward</mat-icon></span>

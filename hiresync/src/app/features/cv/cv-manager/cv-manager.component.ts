@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
@@ -8,7 +8,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { CvService } from '../../../core/services/cv.service';
-import { CV, CVOptimizationHistoryItem } from '../../../core/models/cv.model';
+import { CV } from '../../../core/models/cv.model';
 import { JobSelectorDialogComponent } from '../../../shared/components/job-selector-dialog/job-selector-dialog.component';
 import { Job } from '../../../core/models/job.model';
 
@@ -29,9 +29,9 @@ export class CvManagerComponent implements OnInit {
   private dialog = inject(MatDialog);
   private router = inject(Router);
 
-  cvs      = signal<CV[]>([]);
-  history  = signal<CVOptimizationHistoryItem[]>([]);
-  loading  = signal(true);
+  cvs         = signal<CV[]>([]);   // accumulated across loaded pages
+  historyCount = signal(0);         // total optimizations, for the bottom CTA
+  loading     = signal(true);
 
   // Upload state
   uploadProgress = signal<number>(0);
@@ -43,6 +43,45 @@ export class CvManagerComponent implements OnInit {
 
   // Which cards have their parsed-content preview expanded
   expanded = signal<Set<string>>(new Set());
+
+  // ── Server-side incremental load ("Afficher N de plus") ──────────────────────
+  // The backend orders active-first then most-recent, so page 0 always opens on
+  // the active CV. "Afficher plus" fetches the next page and appends it.
+  readonly CV_PAGE = 6;
+  cvTotal       = signal(0);    // total CVs on the server
+  cvLoadingMore = signal(false);
+  private cvPage = 0;           // index of the last page loaded (0-based)
+
+  /** What the grid renders — the pages loaded so far. */
+  visibleCvs = computed(() => this.cvs());
+  hiddenCvCount = computed(() => Math.max(0, this.cvTotal() - this.cvs().length));
+  allCvsShown   = computed(() => this.cvs().length >= this.cvTotal());
+
+  /** Load the first page (resets accumulation). */
+  private loadCvs(): void {
+    this.cvPage = 0;
+    this.loading.set(true);
+    this.svc.getPage(0, this.CV_PAGE).subscribe({
+      next: p => { this.cvs.set(p.content); this.cvTotal.set(p.totalElements); this.loading.set(false); },
+      error: () => this.loading.set(false),   // never stay frozen
+    });
+  }
+
+  showMoreCvs(): void {
+    if (this.cvLoadingMore() || this.allCvsShown()) return;
+    this.cvLoadingMore.set(true);
+    this.svc.getPage(this.cvPage + 1, this.CV_PAGE).subscribe({
+      next: p => {
+        this.cvPage += 1;
+        this.cvs.update(list => [...list, ...p.content]);
+        this.cvTotal.set(p.totalElements);
+        this.cvLoadingMore.set(false);
+      },
+      error: () => this.cvLoadingMore.set(false),
+    });
+  }
+
+  showLessCvs(): void { this.loadCvs(); }
 
   toggleExpand(id: string): void {
     this.expanded.update(set => {
@@ -57,12 +96,9 @@ export class CvManagerComponent implements OnInit {
   readonly circumference = 2 * Math.PI * 28;
 
   ngOnInit(): void {
-    this.svc.getAll().subscribe({
-      next: c => { this.cvs.set(c); this.loading.set(false); },
-      error: () => this.loading.set(false),   // never stay frozen
-    });
-    this.svc.getOptimizationHistory().subscribe({
-      next: h => this.history.set(h),
+    this.loadCvs();
+    this.svc.getHistoryStats().subscribe({
+      next: s => this.historyCount.set(s.total),
       error: () => {},
     });
   }
@@ -83,9 +119,11 @@ export class CvManagerComponent implements OnInit {
         if (evt.type === 'progress') {
           this.uploadProgress.set(evt.progress ?? 0);
         } else if (evt.type === 'done' && evt.cv) {
-          this.cvs.update(list => [evt.cv!, ...list]);
           this.uploading.set(false);
           this.uploadProgress.set(0);
+          // Reload the first page so the new CV lands in correct server order and
+          // the total count updates.
+          this.loadCvs();
           this.snack.open('✅ CV uploadé — Score ATS initial calculé !', 'OK', { duration: 3500 });
         } else if (evt.type === 'error') {
           this.uploading.set(false);
@@ -120,6 +158,7 @@ export class CvManagerComponent implements OnInit {
     this.deleting.set(cv.id);
     this.svc.delete(cv.id).subscribe(() => {
       this.cvs.update(list => list.filter(c => c.id !== cv.id));
+      this.cvTotal.update(n => Math.max(0, n - 1));
       this.deleting.set(null);
       this.snack.open('🗑️ CV supprimé', 'OK', { duration: 2500 });
     });
@@ -189,18 +228,4 @@ export class CvManagerComponent implements OnInit {
       : Math.round(bytes / 1024) + ' KB';
   }
 
-  historyForCv(cvId: string): CVOptimizationHistoryItem[] {
-    return this.history(); // TODO: filter by cvId once backend sends it
-  }
-
-  /** Extract a readable model name from the full OpenRouter model ID */
-  modelLabel(item: CVOptimizationHistoryItem): string {
-    const raw = (item as any).modelUsed ?? '';
-    if (raw.includes('gemma'))    return 'Gemma 4 31B';
-    if (raw.includes('mistral'))  return 'Mistral 7B';
-    if (raw.includes('llama'))    return 'LLaMA 3.3 70B';
-    if (raw.includes('qwen'))     return 'Qwen3';
-    if (raw.includes('nemotron')) return 'Nemotron';
-    return raw || 'Gemma 4 31B';
-  }
 }

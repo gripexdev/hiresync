@@ -11,6 +11,7 @@ import ma.hiresync.cv.repository.CvRepository;
 import ma.hiresync.cv.service.AiGatewayService;
 import ma.hiresync.cv.service.AtsScorer;
 import ma.hiresync.notification.NotificationService;
+import ma.hiresync.notification.entity.NotificationType;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -92,6 +93,11 @@ public class OptimizationConsumer {
                     userId, optim.getId(), "rejected",
                     "Profil incompatible avec cette offre — optimisation non réalisable."
                 );
+                notificationSvc.create(userId, NotificationType.CV_REJECTED,
+                    "Optimisation refusée",
+                    String.format("« %s » — profil incompatible avec cette offre (%d%% de compatibilité).",
+                        optim.getJobTitle(), verdict.score()),
+                    "/cv/optimize/" + optim.getId());
                 log.info("Optimization {} REJECTED — score {}%, {} → {}",
                     optim.getId(), verdict.score(), verdict.candidateProfile(), verdict.targetProfile());
                 return;
@@ -129,14 +135,20 @@ public class OptimizationConsumer {
             optim.setCompletedAt(Instant.now());
             optimRepo.save(optim);
 
-            // ── Step 6: Push WebSocket notification ──────────────────────────
+            // ── Step 6: Push WebSocket notification + persist a bell notification ─
+            String doneMessage = String.format("CV optimisé ! Score ATS : %d%% → %d%% (%d/%d mots-clés)",
+                before.score(), after.score(), after.matched().size(),
+                after.matched().size() + after.missing().size());
             notificationSvc.pushCvOptimizationEvent(
                 userId, optim.getId(), "completed",
-                String.format("CV optimisé ! Score ATS : %d%% → %d%% (%d/%d mots-clés)",
-                    before.score(), after.score(), after.matched().size(),
-                    after.matched().size() + after.missing().size()),
+                doneMessage,
                 aiResult.provider()   // tell Angular which model actually ran
             );
+            notificationSvc.create(userId, NotificationType.CV_OPTIMIZED,
+                "CV optimisé avec succès",
+                String.format("« %s » : score ATS %d%% → %d%%.",
+                    optim.getJobTitle(), before.score(), after.score()),
+                "/cv/optimize/" + optim.getId());
             log.info("Optimization {} completed in {}ms. ATS {}%→{}%, keywords {}/{} matched",
                 optim.getId(), System.currentTimeMillis() - start, before.score(), after.score(),
                 after.matched().size(), after.matched().size() + after.missing().size());
@@ -150,15 +162,11 @@ public class OptimizationConsumer {
                 userId, optim.getId(), "failed",
                 "Tous les services IA sont temporairement indisponibles. Réessayez dans quelques minutes."
             );
-        }
-    }
-
-    private int countSuggestions(String json) {
-        try {
-            var node = objectMapper.readTree(json);
-            return node.isArray() ? node.size() : 3;
-        } catch (Exception e) {
-            return 3;
+            notificationSvc.create(userId, NotificationType.CV_FAILED,
+                "Échec de l'optimisation",
+                String.format("« %s » : les services IA sont temporairement indisponibles. Réessayez plus tard.",
+                    optim.getJobTitle()),
+                "/cv/optimize/" + optim.getId());
         }
     }
 

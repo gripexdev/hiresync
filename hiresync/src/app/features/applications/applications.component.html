@@ -2,13 +2,13 @@
   <div class="page-header__row">
     <div>
       <h1>Mes candidatures</h1>
-      <p>{{ all().length }} candidature(s) au total · glissez une carte pour changer son statut</p>
+      <p>{{ totalCount() }} candidature(s) au total · glissez une carte pour changer son statut</p>
     </div>
     <div class="view-toggle">
-      <button [class.active]="view() === 'kanban'" (click)="view.set('kanban')">
+      <button [class.active]="view() === 'kanban'" (click)="switchView('kanban')">
         <mat-icon>view_kanban</mat-icon> Kanban
       </button>
-      <button [class.active]="view() === 'table'" (click)="view.set('table')">
+      <button [class.active]="view() === 'table'" (click)="switchView('table')">
         <mat-icon>table_rows</mat-icon> Tableau
       </button>
     </div>
@@ -17,7 +17,7 @@
 
 @if (loading()) {
   <div class="loading-center"><mat-spinner diameter="40" /></div>
-} @else if (all().length === 0) {
+} @else if (totalCount() === 0) {
   <div class="hs-card apps-empty">
     <div class="apps-empty__icon"><mat-icon>work_outline</mat-icon></div>
     <h2>Aucune candidature</h2>
@@ -34,7 +34,7 @@
           <div class="column-header">
             <div class="column-header__dot" [style.background]="col.color"></div>
             <h3>{{ col.label }}</h3>
-            <span class="count">{{ col.apps.length }}</span>
+            <span class="count">{{ col.total }}</span>
           </div>
 
           <div class="kanban-column__body"
@@ -44,7 +44,7 @@
                [cdkDropListConnectedTo]="columnIds"
                (cdkDropListDropped)="onDrop($event)">
 
-            @for (app of col.apps; track app.id) {
+            @for (app of col.items; track app.id) {
               <div class="kanban-card" cdkDrag [cdkDragData]="app" (click)="selected.set(app)">
                 <div class="kanban-card__top">
                   <div class="kanban-card__company">{{ app.company }}</div>
@@ -76,10 +76,26 @@
               </div>
             }
 
-            @if (col.apps.length === 0) {
+            @if (col.total === 0) {
               <div class="kanban-empty">Déposez ici</div>
             }
           </div>
+
+          <!-- Per-column server-side lazy load -->
+          @if (col.hiddenCount > 0) {
+            <button class="kanban-more" (click)="showMore(col.id)" type="button" [disabled]="col.loading">
+              @if (col.loading) {
+                <mat-spinner diameter="14" />
+              } @else {
+                <mat-icon>expand_more</mat-icon>
+              }
+              Voir {{ col.hiddenCount }} de plus
+            </button>
+          } @else if (col.expandable) {
+            <button class="kanban-more kanban-more--less" (click)="showLess(col.id)" type="button">
+              <mat-icon>expand_less</mat-icon> Réduire
+            </button>
+          }
         </div>
       }
     </div>
@@ -101,7 +117,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (app of all(); track app.id) {
+          @for (app of tableRows(); track app.id) {
             <tr class="table-row">
               <td class="td-title" (click)="selected.set(app)">{{ app.jobTitle }}</td>
               <td (click)="selected.set(app)">{{ app.company }}</td>
@@ -130,6 +146,15 @@
           }
         </tbody>
       </table>
+
+      <app-paginator
+        [total]="tableTotal()"
+        [page]="tablePage()"
+        [pageSize]="tablePageSize()"
+        [pageSizeOptions]="[8, 16, 32]"
+        itemLabel="candidature(s)"
+        (pageChange)="goToTablePage($event)"
+        (pageSizeChange)="changeTablePageSize($event)" />
     </div>
   }
 }

@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Application, ApplicationStats, ApplyRequest, ApplicationStatus } from '../models/application.model';
+import { Page } from '../models/page.model';
 
 @Injectable({ providedIn: 'root' })
 export class ApplicationService {
@@ -10,9 +11,16 @@ export class ApplicationService {
 
   constructor(private http: HttpClient) {}
 
-  /** GET /api/applications — current user's applications */
-  getAll(): Observable<Application[]> {
-    return this.http.get<Application[]>(this.base);
+  /**
+   * GET /api/applications — server-side paginated applications, newest first.
+   * Pass a `status` to fetch a single kanban column; omit it for the full table list.
+   */
+  getPage(opts: { status?: ApplicationStatus | null; page: number; size: number }): Observable<Page<Application>> {
+    let params = new HttpParams()
+      .set('page', opts.page)
+      .set('size', opts.size);
+    if (opts.status) params = params.set('status', opts.status);
+    return this.http.get<Page<Application>>(this.base, { params });
   }
 
   /** GET /api/applications/stats */

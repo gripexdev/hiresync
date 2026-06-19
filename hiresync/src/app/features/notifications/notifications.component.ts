@@ -22,6 +22,8 @@ export class NotificationsComponent implements OnInit {
   readonly icons: Record<string, string> = {
     job_match:           'hub',
     cv_optimized:        'auto_awesome',
+    cv_rejected:         'block',
+    cv_failed:           'error_outline',
     application_update:  'track_changes',
     interview_scheduled: 'calendar_today',
     offer_received:      'celebration',
@@ -30,6 +32,8 @@ export class NotificationsComponent implements OnInit {
   readonly iconColors: Record<string, string> = {
     job_match:           '#2E86AB',
     cv_optimized:        '#17A589',
+    cv_rejected:         '#F59E0B',
+    cv_failed:           '#EF4444',
     application_update:  '#F59E0B',
     interview_scheduled: '#10B981',
     offer_received:      '#8B5CF6',
@@ -38,6 +42,8 @@ export class NotificationsComponent implements OnInit {
   readonly typeLabels: Record<string, string> = {
     job_match:           'Nouvelle offre',
     cv_optimized:        'CV optimisé',
+    cv_rejected:         'Optimisation refusée',
+    cv_failed:           'Optimisation échouée',
     application_update:  'Candidature',
     interview_scheduled: 'Entretien',
     offer_received:      'Offre reçue',

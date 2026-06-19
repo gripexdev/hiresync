@@ -27,7 +27,7 @@
 }
 
 <!-- ── Empty (no optimizations at all) ────────────────────────────────────── -->
-@else if (totalCount() === 0) {
+@else if (isEmpty) {
   <div class="hs-card hist-empty">
     <div class="hist-empty__icon"><mat-icon>history</mat-icon></div>
     <h2>Aucune optimisation pour l'instant</h2>
@@ -43,7 +43,7 @@
     <div class="hs-card stat-card">
       <div class="stat-card__icon stat-card__icon--blue"><mat-icon>insights</mat-icon></div>
       <div class="stat-card__body">
-        <span class="stat-card__value">{{ totalCount() }}</span>
+        <span class="stat-card__value">{{ stats()?.total ?? 0 }}</span>
         <span class="stat-card__label">Optimisations</span>
       </div>
     </div>
@@ -51,7 +51,7 @@
     <div class="hs-card stat-card">
       <div class="stat-card__icon stat-card__icon--green"><mat-icon>check_circle</mat-icon></div>
       <div class="stat-card__body">
-        <span class="stat-card__value">{{ completedCount() }}</span>
+        <span class="stat-card__value">{{ stats()?.completed ?? 0 }}</span>
         <span class="stat-card__label">Réussies</span>
       </div>
     </div>
@@ -59,7 +59,7 @@
     <div class="hs-card stat-card">
       <div class="stat-card__icon stat-card__icon--amber"><mat-icon>trending_up</mat-icon></div>
       <div class="stat-card__body">
-        <span class="stat-card__value">+{{ avgGain() }}<small>pts</small></span>
+        <span class="stat-card__value">+{{ stats()?.avgGain ?? 0 }}<small>pts</small></span>
         <span class="stat-card__label">Gain moyen</span>
       </div>
     </div>
@@ -67,7 +67,7 @@
     <div class="hs-card stat-card">
       <div class="stat-card__icon stat-card__icon--violet"><mat-icon>military_tech</mat-icon></div>
       <div class="stat-card__body">
-        <span class="stat-card__value" [style.color]="scoreColor(bestScore())">{{ bestScore() }}<small>%</small></span>
+        <span class="stat-card__value" [style.color]="scoreColor(stats()?.bestScore ?? 0)">{{ stats()?.bestScore ?? 0 }}<small>%</small></span>
         <span class="stat-card__label">Meilleur score</span>
       </div>
     </div>
@@ -103,7 +103,7 @@
   </div>
 
   <!-- Results -->
-  @if (visible().length === 0) {
+  @if (history().length === 0) {
     <div class="hs-card hist-empty hist-empty--compact">
       <div class="hist-empty__icon"><mat-icon>filter_alt_off</mat-icon></div>
       <h2>Aucun résultat</h2>
@@ -124,7 +124,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (item of visible(); track trackById($index, item)) {
+          @for (item of history(); track trackById($index, item)) {
             <tr [class.tr-failed]="item.status === 'failed'"
                 [class.tr-rejected]="item.status === 'rejected'">
               <!-- Poste -->
@@ -211,5 +211,14 @@
         </tbody>
       </table>
     </div>
+
+    <app-paginator
+      [total]="total()"
+      [page]="page()"
+      [pageSize]="pageSize()"
+      [pageSizeOptions]="[10, 25, 50]"
+      itemLabel="optimisation(s)"
+      (pageChange)="goToPage($event)"
+      (pageSizeChange)="changePageSize($event)" />
   }
 }

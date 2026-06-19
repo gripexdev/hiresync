@@ -18,6 +18,8 @@ import ma.hiresync.cv.repository.CvRepository;
 import ma.hiresync.job.entity.Job;
 import ma.hiresync.job.repository.JobRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -47,27 +49,26 @@ public class CvService {
     private String uploadDir;
 
     // ── GET /api/cv/versions ─────────────────────────────────────────────────
-    public List<CvResponse> getAllCvs(UUID userId) {
-        var cvs = cvRepo.findByUserIdOrderByUploadedAtDesc(userId);
-
+    public Page<CvResponse> getAllCvs(UUID userId, Pageable pageable) {
         // Self-heal: a user with CVs must always have exactly one active CV (it's the
         // one used by default when optimizing for a job). If none is active — e.g. the
-        // previously active CV was deleted — activate the most recent one.
-        if (!cvs.isEmpty() && cvs.stream().noneMatch(Cv::isActive)) {
-            var newest = cvs.get(0);   // list is ordered uploadedAt desc
-            newest.setActive(true);
-            cvRepo.save(newest);
-            log.info("No active CV for user {} — auto-activated most recent {}", userId, newest.getId());
+        // previously active CV was deleted — activate the most recent one. Done with
+        // cheap existence checks so it stays O(1) regardless of how many CVs exist.
+        if (cvRepo.countByUserId(userId) > 0 && cvRepo.findByUserIdAndActiveTrue(userId).isEmpty()) {
+            cvRepo.findFirstByUserIdOrderByUploadedAtDesc(userId).ifPresent(newest -> {
+                newest.setActive(true);
+                cvRepo.save(newest);
+                log.info("No active CV for user {} — auto-activated most recent {}", userId, newest.getId());
+            });
         }
 
-        return cvs.stream()
+        return cvRepo.findByUserIdOrderByActiveDescUploadedAtDesc(userId, pageable)
                 .map(cv -> {
                     Map<String, String> sections = cv.getExtractedText() != null
                         ? atsScorer.parseSections(cv.getExtractedText())
                         : Map.of();
                     return CvResponse.from(cv, sections);
-                })
-                .toList();
+                });
     }
 
     // ── POST /api/cv/upload ───────────────────────────────────────────────────
@@ -202,11 +203,24 @@ public class CvService {
 
     // ── GET /api/cv/optimization-history ─────────────────────────────────────
     @Transactional(readOnly = true)
-    public List<OptimizationResponse> getHistory(UUID userId) {
-        return optimRepo.findByCvUserIdOrderByCreatedAtDesc(userId)
-                .stream()
-                .map(o -> OptimizationResponse.from(o, parseChanges(o.getSuggestedChangesJson())))
-                .toList();
+    public Page<OptimizationResponse> getHistory(UUID userId, CvOptimization.OptimizationStatus status,
+                                                 String q, Pageable pageable) {
+        String search = (q == null || q.isBlank()) ? null : q.trim().toLowerCase();
+        return optimRepo.search(userId, status, search, pageable)
+                .map(o -> OptimizationResponse.from(o, parseChanges(o.getSuggestedChangesJson())));
+    }
+
+    // ── GET /api/cv/optimization-history/stats ───────────────────────────────
+    @Transactional(readOnly = true)
+    public HistoryStatsResponse getHistoryStats(UUID userId) {
+        var done = CvOptimization.OptimizationStatus.COMPLETED;
+        long total     = optimRepo.countByCvUserId(userId);
+        long completed = optimRepo.countByCvUserIdAndStatus(userId, done);
+        long rejected  = optimRepo.countByCvUserIdAndStatus(userId, CvOptimization.OptimizationStatus.REJECTED);
+        long failed    = optimRepo.countByCvUserIdAndStatus(userId, CvOptimization.OptimizationStatus.FAILED);
+        int  avgGain   = (int) Math.round(optimRepo.avgGain(userId, done));
+        int  bestScore = optimRepo.bestScore(userId, done);
+        return new HistoryStatsResponse(total, completed, rejected, failed, avgGain, bestScore);
     }
 
     // ── GET /api/cv/structured/{optimizationId} ──────────────────────────────

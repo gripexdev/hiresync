@@ -1,0 +1,51 @@
+@if (total() > 0) {
+  <div class="hs-paginator">
+    <div class="hs-paginator__info">
+      Affichage <strong>{{ rangeStart() }}–{{ rangeEnd() }}</strong>
+      sur <strong>{{ total() }}</strong> {{ itemLabel() }}
+    </div>
+
+    <div class="hs-paginator__controls">
+      <label class="hs-paginator__size">
+        <span>Par page</span>
+        <select [value]="pageSize()" (change)="onSize($event)">
+          @for (opt of pageSizeOptions(); track opt) {
+            <option [value]="opt">{{ opt }}</option>
+          }
+        </select>
+      </label>
+
+      @if (multiPage()) {
+        <nav class="hs-paginator__pages" aria-label="Pagination">
+          <button class="pg-btn" [disabled]="page() === 1" (click)="go(1)"
+                  matTooltip="Première page" aria-label="Première page">
+            <mat-icon>first_page</mat-icon>
+          </button>
+          <button class="pg-btn" [disabled]="page() === 1" (click)="go(page() - 1)"
+                  matTooltip="Précédent" aria-label="Page précédente">
+            <mat-icon>chevron_left</mat-icon>
+          </button>
+
+          @for (p of pages(); track $index) {
+            @if (p === -1) {
+              <span class="pg-ellipsis">…</span>
+            } @else {
+              <button class="pg-num" [class.pg-num--active]="p === page()"
+                      [attr.aria-current]="p === page() ? 'page' : null"
+                      (click)="go(p)">{{ p }}</button>
+            }
+          }
+
+          <button class="pg-btn" [disabled]="page() === totalPages()" (click)="go(page() + 1)"
+                  matTooltip="Suivant" aria-label="Page suivante">
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+          <button class="pg-btn" [disabled]="page() === totalPages()" (click)="go(totalPages())"
+                  matTooltip="Dernière page" aria-label="Dernière page">
+            <mat-icon>last_page</mat-icon>
+          </button>
+        </nav>
+      }
+    </div>
+  </div>
+}

@@ -85,6 +85,25 @@ $primary: #2E86AB; $accent: #17A589;
   @media (max-width: 560px) { grid-template-columns: 1fr; }
 }
 
+.cv-reveal {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  margin-top: 20px;
+
+  &__btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 9px 18px;
+    background: #fff; border: 1px solid #D7DEE6; border-radius: 10px;
+    font-size: 13px; font-weight: 600; color: #475569; cursor: pointer;
+    transition: all .15s;
+
+    &:hover { border-color: $primary; color: $primary; background: rgba(46,134,171,.05); }
+    &--less { color: #94A3B8; }
+    mat-icon { font-size: 18px; width: 18px; height: 18px; }
+  }
+
+  &__count { font-size: 12px; font-weight: 600; color: #94A3B8; }
+}
+
 .cv-card {
   padding: 18px 20px; position: relative;
   display: flex; flex-direction: column;

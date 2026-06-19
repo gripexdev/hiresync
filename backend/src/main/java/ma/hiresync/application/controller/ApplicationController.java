@@ -6,13 +6,16 @@ import ma.hiresync.application.dto.ApplicationResponse;
 import ma.hiresync.application.dto.ApplicationStatsResponse;
 import ma.hiresync.application.dto.ApplyRequest;
 import ma.hiresync.application.dto.UpdateStatusRequest;
+import ma.hiresync.application.entity.JobApplication.ApplicationStatus;
 import ma.hiresync.application.service.ApplicationService;
 import ma.hiresync.auth.service.JwtService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -58,11 +61,20 @@ public class ApplicationController {
         return ResponseEntity.ok(applicationService.updateStatus(userId, id, req.status()));
     }
 
-    /** GET /api/applications — the current user's applications. */
+    /**
+     * GET /api/applications — the current user's applications, server-side paginated.
+     * Optional {@code status} filter powers per-column kanban lazy-loading; without it
+     * the full list is paginated for the table view. Newest first.
+     */
     @GetMapping
-    public ResponseEntity<List<ApplicationResponse>> myApplications(
+    public ResponseEntity<Page<ApplicationResponse>> myApplications(
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
             @RequestHeader("Authorization") String authHeader) {
-        return ResponseEntity.ok(applicationService.getMyApplications(extractUserId(authHeader)));
+        var pageable = PageRequest.of(page, size, Sort.by("appliedAt").descending());
+        return ResponseEntity.ok(
+                applicationService.getMyApplications(extractUserId(authHeader), parseStatus(status), pageable));
     }
 
     /** GET /api/applications/stats — kanban/dashboard counters. */
@@ -79,6 +91,16 @@ public class ApplicationController {
             @RequestHeader("Authorization") String authHeader) {
         boolean applied = applicationService.hasApplied(extractUserId(authHeader), jobId);
         return ResponseEntity.ok(Map.of("applied", applied));
+    }
+
+    /** Parse an optional status filter; null / blank / "all" means "no filter". */
+    private static ApplicationStatus parseStatus(String raw) {
+        if (raw == null || raw.isBlank() || raw.equalsIgnoreCase("all")) return null;
+        try {
+            return ApplicationStatus.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Statut invalide : " + raw);
+        }
     }
 
     private UUID extractUserId(String authHeader) {

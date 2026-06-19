@@ -75,6 +75,18 @@ $primary: #2E86AB; $accent: #17A589;
 
 .kanban-empty { font-size: 12px; color: #CBD5E1; text-align: center; padding: 20px 0; }
 
+.kanban-more {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  width: 100%; margin-top: 8px; padding: 7px 0;
+  background: #fff; border: 1px dashed #CBD5E1; border-radius: 8px;
+  font-size: 12px; font-weight: 600; color: #475569; cursor: pointer;
+  transition: all .15s;
+
+  &:hover { border-color: $primary; color: $primary; background: rgba(46,134,171,.05); }
+  &--less { color: #94A3B8; }
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+}
+
 // ── Table view ─────────────────────────────────────────────────────────────────
 .table-card { overflow: hidden; padding: 0; }
 .app-table {
