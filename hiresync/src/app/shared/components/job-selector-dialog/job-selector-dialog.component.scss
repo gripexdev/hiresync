@@ -1,6 +1,9 @@
 $primary: #2E86AB; $accent: #17A589;
 
-:host { display: flex; flex-direction: column; width: 520px; max-height: 80vh; }
+:host {
+  display: flex; flex-direction: column;
+  width: 520px; max-width: 100%; max-height: 80vh;
+}
 
 .dialog-header {
   display: flex; align-items: flex-start; gap: 14px;

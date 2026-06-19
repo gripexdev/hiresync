@@ -169,6 +169,7 @@ export class CvManagerComponent implements OnInit {
     const ref = this.dialog.open(JobSelectorDialogComponent, {
       panelClass: 'hs-dialog',
       disableClose: false,
+      maxWidth: '92vw', // the dialog's own width is 520px — cap it so it never overflows a narrow phone
     });
 
     ref.afterClosed().subscribe((job: Job | null) => {
