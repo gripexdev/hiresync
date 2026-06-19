@@ -20,6 +20,11 @@ public record ApplicationResponse(
         Instant updatedAt
 ) {
     public static ApplicationResponse from(JobApplication a) {
+        return from(a, a.getMatchScore());
+    }
+
+    /** Variant allowing a live/recomputed match score to override the stored one. */
+    public static ApplicationResponse from(JobApplication a, Integer matchScore) {
         return new ApplicationResponse(
             a.getId(),
             a.getJobId(),
@@ -30,7 +35,7 @@ public record ApplicationResponse(
             a.getCvFileName(),
             a.getStatus().name().toLowerCase(),
             a.getCoverNote(),
-            a.getMatchScore(),
+            matchScore,
             a.getAppliedAt(),
             a.getUpdatedAt()
         );

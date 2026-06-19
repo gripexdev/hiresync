@@ -9,7 +9,10 @@ import ma.hiresync.application.entity.JobApplication;
 import ma.hiresync.application.entity.JobApplication.ApplicationStatus;
 import ma.hiresync.application.repository.JobApplicationRepository;
 import ma.hiresync.cv.entity.Cv;
+import ma.hiresync.cv.entity.CvOptimization;
+import ma.hiresync.cv.repository.CvOptimizationRepository;
 import ma.hiresync.cv.repository.CvRepository;
+import ma.hiresync.cv.service.AtsScorer;
 import ma.hiresync.job.entity.Job;
 import ma.hiresync.job.repository.JobRepository;
 import org.springframework.stereotype.Service;
@@ -28,6 +31,8 @@ public class ApplicationService {
     private final JobApplicationRepository appRepo;
     private final JobRepository            jobRepo;
     private final CvRepository             cvRepo;
+    private final CvOptimizationRepository optimRepo;
+    private final AtsScorer                atsScorer;
 
     /** Apply to a job with a chosen CV. Snapshots job + CV details at apply time. */
     public ApplicationResponse apply(UUID userId, UUID jobId, ApplyRequest req) {
@@ -51,7 +56,7 @@ public class ApplicationService {
             .cvFileName(cv.getFileName())
             .status(ApplicationStatus.APPLIED)
             .coverNote(req.coverNote() != null && !req.coverNote().isBlank() ? req.coverNote().trim() : null)
-            .matchScore(cv.getAtsScore() > 0 ? cv.getAtsScore() : null)
+            .matchScore(computeMatchScore(userId, job, cv))
             .appliedAt(Instant.now())
             .build();
 
@@ -83,7 +88,7 @@ public class ApplicationService {
             .cvId(cv.getId())
             .cvFileName(cv.getFileName())
             .status(ApplicationStatus.APPLIED)
-            .matchScore(cv.getAtsScore() > 0 ? cv.getAtsScore() : null)
+            .matchScore(computeMatchScore(userId, job, cv))
             .appliedAt(Instant.now())
             .build();
         appRepo.save(application);
@@ -113,7 +118,47 @@ public class ApplicationService {
     @Transactional(readOnly = true)
     public List<ApplicationResponse> getMyApplications(UUID userId) {
         return appRepo.findByUserIdOrderByAppliedAtDesc(userId)
-                .stream().map(ApplicationResponse::from).toList();
+                .stream()
+                // Enrich with the live, job-specific match score so every card (incl. older
+                // ones stored with the generic CV score) reflects the real CV↔job fit.
+                .map(a -> ApplicationResponse.from(a, liveMatchScore(userId, a)))
+                .toList();
+    }
+
+    /**
+     * The real CV↔job compatibility score, preferring the optimization result for
+     * this exact job; falls back to the value snapshotted at apply time.
+     */
+    private Integer liveMatchScore(UUID userId, JobApplication a) {
+        Integer optimScore = optimizationScore(userId, a.getJobId());
+        return optimScore != null ? optimScore : a.getMatchScore();
+    }
+
+    /**
+     * Compute the match score at apply time:
+     *   1. the optimization's optimized ATS score for this job (most accurate), else
+     *   2. a job-specific ATS match of the CV text against the job's requirements, else
+     *   3. the CV's generic upload ATS score.
+     */
+    private Integer computeMatchScore(UUID userId, Job job, Cv cv) {
+        Integer optimScore = optimizationScore(userId, job.getId());
+        if (optimScore != null) return optimScore;
+
+        String cvText = cv.getExtractedText();
+        if (cvText != null && !cvText.isBlank()
+                && job.getRequirements() != null && !job.getRequirements().isEmpty()) {
+            return atsScorer.computeJobMatch(cvText, job.getRequirements()).score();
+        }
+        return cv.getAtsScore() > 0 ? cv.getAtsScore() : null;
+    }
+
+    /** Optimized ATS score from the most recent non-failed optimization for this job, or null. */
+    private Integer optimizationScore(UUID userId, UUID jobId) {
+        return optimRepo.findFirstByCvUserIdAndJobIdAndStatusNotOrderByCreatedAtDesc(
+                    userId, jobId.toString(), CvOptimization.OptimizationStatus.FAILED)
+                .map(CvOptimization::getOptimizedScore)
+                .filter(s -> s > 0)
+                .orElse(null);
     }
 
     @Transactional(readOnly = true)
