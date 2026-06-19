@@ -48,7 +48,9 @@ $accent:  #17A589;
 
   &__body { display: flex; flex-direction: column; gap: 2px; }
   &__value { font-size: 28px; font-weight: 800; color: #1A202C; line-height: 1; }
+  &__value--muted { color: #CBD5E1; }
   &__label { font-size: 12px; color: #64748B; }
+  &__label--link { color: $accent; font-weight: 600; text-decoration: none; &:hover { text-decoration: underline; } }
 
   &--primary .stat-card__icon { background: rgba(46,134,171,.1);  mat-icon { color: $primary; } }
   &--warning .stat-card__icon { background: rgba(245,158,11,.1);  mat-icon { color: #F59E0B; } }

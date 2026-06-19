@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { AuthService } from '../../core/auth/auth.service';
 import { ApplicationService } from '../../core/services/application.service';
 import { NotificationService } from '../../core/services/notification.service';
+import { CvService } from '../../core/services/cv.service';
 import { Application, ApplicationStats } from '../../core/models/application.model';
 import { Notification } from '../../core/models/notification.model';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge.component';
@@ -21,11 +22,15 @@ export class DashboardComponent implements OnInit {
   auth         = inject(AuthService);
   appService   = inject(ApplicationService);
   notifService = inject(NotificationService);
+  cvService    = inject(CvService);
 
   stats         = signal<ApplicationStats | null>(null);
   applications  = signal<Application[]>([]);
   notifications = signal<Notification[]>([]);
   loading       = signal(true);
+
+  /** ATS score of the active CV, or null when the candidate hasn't uploaded one yet. */
+  cvScore = signal<number | null>(null);
 
   readonly quickActions = [
     { icon: 'work_outline',  label: 'Rechercher des offres', route: '/jobs',         color: '#2E86AB' },
@@ -48,5 +53,9 @@ export class DashboardComponent implements OnInit {
     this.appService.getStats().subscribe(s => this.stats.set(s));
     this.appService.getPage({ page: 0, size: 5 }).subscribe(p => { this.applications.set(p.content); this.loading.set(false); });
     this.notifService.getAll().subscribe(n => this.notifications.set(n.slice(0, 5)));
+    this.cvService.getAll().subscribe(cvs => {
+      const active = cvs.find(c => c.isActive) ?? cvs[0];
+      this.cvScore.set(active ? active.atsScore : null);
+    });
   }
 }

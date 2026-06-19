@@ -38,8 +38,13 @@
     <div class="stat-card stat-card--accent">
       <div class="stat-card__icon"><mat-icon>auto_awesome</mat-icon></div>
       <div class="stat-card__body">
-        <span class="stat-card__value">88%</span>
-        <span class="stat-card__label">Score ATS du CV</span>
+        @if (cvScore(); as score) {
+          <span class="stat-card__value">{{ score }}%</span>
+          <span class="stat-card__label">Score ATS du CV</span>
+        } @else {
+          <span class="stat-card__value stat-card__value--muted">—</span>
+          <a routerLink="/cv" class="stat-card__label stat-card__label--link">Uploader un CV</a>
+        }
       </div>
     </div>
   </div>
