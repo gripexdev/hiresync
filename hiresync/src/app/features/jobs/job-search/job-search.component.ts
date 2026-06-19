@@ -9,10 +9,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { debounceTime, distinctUntilChanged } from 'rxjs';
 import { JobService } from '../../../core/services/job.service';
-import { AuthService } from '../../../core/auth/auth.service';
 import { Job, JobFacets } from '../../../core/models/job.model';
 
 @Component({
@@ -20,16 +18,14 @@ import { Job, JobFacets } from '../../../core/models/job.model';
   standalone: true,
   imports: [CommonModule, RouterModule, ReactiveFormsModule, MatFormFieldModule,
     MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatChipsModule,
-    MatProgressSpinnerModule, MatSnackBarModule],
+    MatProgressSpinnerModule],
   templateUrl: './job-search.component.html',
   styleUrls: ['./job-search.component.scss'],
 })
 export class JobSearchComponent implements OnInit {
   private fb     = inject(FormBuilder);
   private svc    = inject(JobService);
-  private snack  = inject(MatSnackBar);
   private router = inject(Router);
-  auth           = inject(AuthService);
 
   jobs        = signal<Job[]>([]);
   total       = signal(0);
@@ -37,12 +33,13 @@ export class JobSearchComponent implements OnInit {
   currentPage = signal(0);
   totalPages  = signal(0);
 
-  // Admin toolbar state
-  scraping  = signal(false);
-  enriching = signal(false);
-
   // Filter options with live counts, loaded from the backend (derived from real data)
   facets = signal<JobFacets | null>(null);
+
+  // Mobile filter panel — the sidebar slides up as an overlay instead of staying
+  // sticky to the top of the screen while the job list scrolls underneath it.
+  filtersOpen       = signal(false);
+  activeFilterCount = signal(0);
 
   readonly PAGE_SIZE = 10;
 
@@ -78,10 +75,16 @@ export class JobSearchComponent implements OnInit {
   ngOnInit(): void {
     this.svc.getFacets().subscribe(f => this.facets.set(f));
     this._search();
+    this.filters.valueChanges.subscribe(() => this._updateActiveFilterCount());
     this.filters.valueChanges.pipe(debounceTime(400), distinctUntilChanged()).subscribe(() => {
       this.currentPage.set(0);
       this._search();
     });
+  }
+
+  private _updateActiveFilterCount(): void {
+    const v = this.filters.value as Record<string, unknown>;
+    this.activeFilterCount.set(Object.values(v).filter(x => x !== null && x !== '').length);
   }
 
   private _search(): void {
@@ -104,43 +107,6 @@ export class JobSearchComponent implements OnInit {
   }
 
   clearFilters(): void { this.filters.reset(); }
-
-  // ── Admin actions ─────────────────────────────────────────────────────────
-
-  triggerScrape(): void {
-    this.scraping.set(true);
-    this.svc.triggerScrape().subscribe({
-      next: r => {
-        this.scraping.set(false);
-        this.snack.open(
-          `🚀 ${r.sourcesQueued} sources en cours de scraping — les offres apparaîtront dans quelques minutes`,
-          'OK', { duration: 6000 }
-        );
-      },
-      error: () => {
-        this.scraping.set(false);
-        this.snack.open('❌ Erreur lors du scraping', 'OK', { duration: 3000 });
-      },
-    });
-  }
-
-  triggerEnrich(): void {
-    this.enriching.set(true);
-    this.svc.triggerEnrich().subscribe({
-      next: r => {
-        this.enriching.set(false);
-        const msg = r.enrichedLeft > 0
-          ? `✅ ${r.enrichedThisRun} offres enrichies — encore ${r.enrichedLeft} à enrichir`
-          : `✅ ${r.enrichedThisRun} offres enrichies — tout est à jour !`;
-        this.snack.open(msg, 'OK', { duration: 5000 });
-        this._search();  // refresh to show new descriptions
-      },
-      error: () => {
-        this.enriching.set(false);
-        this.snack.open('❌ Erreur lors de l\'enrichissement', 'OK', { duration: 3000 });
-      },
-    });
-  }
 
   matchClass(score?: number): string {
     if (!score) return '';

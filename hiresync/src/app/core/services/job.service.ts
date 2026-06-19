@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
-import { EnrichResult, Job, JobFacets, JobSearchParams, JobSearchResult, ScrapeResult } from '../models/job.model';
+import { Job, JobFacets, JobSearchParams, JobSearchResult } from '../models/job.model';
 
 interface SpringPage<T> {
   content: T[];
@@ -57,17 +57,5 @@ export class JobService {
     }).pipe(
       map(page => page.content.filter(j => j.id !== jobId).slice(0, 3))
     );
-  }
-
-  // ── Admin actions ───────────────────────────────────────────────────────
-
-  /** POST /api/admin/scrape/trigger — runs the rekrute.com scraper synchronously */
-  triggerScrape(): Observable<ScrapeResult> {
-    return this.http.post<ScrapeResult>(`${environment.apiUrl}/admin/scrape/trigger`, {});
-  }
-
-  /** POST /api/admin/enrich/trigger — fetches detail pages for unenriched jobs */
-  triggerEnrich(): Observable<EnrichResult> {
-    return this.http.post<EnrichResult>(`${environment.apiUrl}/admin/enrich/trigger`, {});
   }
 }

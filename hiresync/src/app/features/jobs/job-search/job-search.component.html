@@ -3,33 +3,28 @@
   <p>{{ total() }} offres trouvées sur le marché marocain</p>
 </div>
 
-<!-- Admin toolbar — visible only when logged in -->
-@if (auth.isLoggedIn()) {
-  <div class="admin-bar">
-    <span class="admin-bar__label"><mat-icon>admin_panel_settings</mat-icon> Admin</span>
-    <button class="admin-btn"
-            [disabled]="scraping()"
-            (click)="triggerScrape()">
-      @if (scraping()) { <mat-spinner diameter="14" /> }
-      @else { <mat-icon>cloud_download</mat-icon> }
-      Scraper rekrute.com
-    </button>
-    <button class="admin-btn admin-btn--enrich"
-            [disabled]="enriching()"
-            (click)="triggerEnrich()">
-      @if (enriching()) { <mat-spinner diameter="14" /> }
-      @else { <mat-icon>auto_fix_high</mat-icon> }
-      Enrichir descriptions
-    </button>
-  </div>
+<!-- Mobile-only filter trigger — opens the filters as a slide-up panel instead of
+     pinning the sidebar to the top of the screen while scrolling the job list. -->
+<button class="filter-trigger" type="button" (click)="filtersOpen.set(true)">
+  <mat-icon>tune</mat-icon> Filtres
+  @if (activeFilterCount() > 0) { <span class="filter-trigger__badge">{{ activeFilterCount() }}</span> }
+</button>
+
+@if (filtersOpen()) {
+  <div class="filter-backdrop" (click)="filtersOpen.set(false)"></div>
 }
 
 <div class="job-layout">
-  <!-- Filter sidebar -->
-  <aside class="filter-sidebar hs-card">
+  <!-- Filter sidebar — inline on desktop, slide-up panel on mobile -->
+  <aside class="filter-sidebar hs-card" [class.filter-sidebar--open]="filtersOpen()">
     <div class="filter-sidebar__header">
       <span><mat-icon>tune</mat-icon> Filtres</span>
-      <button class="clear-btn" (click)="clearFilters()" type="button">Réinitialiser</button>
+      <div class="filter-sidebar__header-actions">
+        <button class="clear-btn" (click)="clearFilters()" type="button">Réinitialiser</button>
+        <button class="filter-close" type="button" (click)="filtersOpen.set(false)" aria-label="Fermer les filtres">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
     </div>
 
     <form [formGroup]="filters" class="filter-form">
@@ -79,6 +74,10 @@
         </mat-select>
       </mat-form-field>
     </form>
+
+    <button class="filter-apply hs-btn-primary" type="button" (click)="filtersOpen.set(false)">
+      Voir {{ total() }} offre(s)
+    </button>
   </aside>
 
   <!-- Jobs list -->

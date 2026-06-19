@@ -1,47 +1,5 @@
 $primary: #2E86AB; $accent: #17A589;
 
-// ── Admin toolbar ──────────────────────────────────────────────────────────────
-.admin-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
-  margin-bottom: 18px;
-  background: #FFF7ED;
-  border: 1px dashed #F59E0B;
-  border-radius: 10px;
-  font-size: 13px;
-
-  &__label {
-    display: flex; align-items: center; gap: 4px;
-    font-weight: 700; color: #B45309;
-    mat-icon { font-size: 16px; width: 16px; height: 16px; }
-  }
-}
-
-.admin-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 14px;
-  border: 1px solid #F59E0B;
-  border-radius: 8px;
-  background: #fff;
-  color: #92400E;
-  font-size: 12px; font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-  mat-icon { font-size: 14px; width: 14px; height: 14px; }
-
-  &:hover:not(:disabled) { background: #FEF3C7; }
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
-
-  &--enrich {
-    border-color: #A78BFA;
-    color: #5B21B6;
-    &:hover:not(:disabled) { background: #EDE9FE; }
-  }
-}
-
 .job-layout {
   display: grid;
   grid-template-columns: 280px 1fr;
@@ -51,7 +9,46 @@ $primary: #2E86AB; $accent: #17A589;
   @media (max-width: 900px) { grid-template-columns: 1fr; }
 }
 
+// ── Mobile filter trigger ───────────────────────────────────────────────────────
+// Hidden on desktop — the sidebar is inline there. On mobile it replaces the
+// sidebar in normal flow so it never sits sticky above the job list.
+.filter-trigger {
+  display: none;
+  align-items: center; gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: #fff;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  font-size: 14px; font-weight: 700; color: #1A202C;
+  cursor: pointer;
+  mat-icon { font-size: 18px; width: 18px; height: 18px; color: $primary; }
+
+  &__badge {
+    margin-left: auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 20px; height: 20px; padding: 0 6px;
+    background: $primary; color: #fff;
+    font-size: 11px; font-weight: 700; border-radius: 9999px;
+  }
+
+  @media (max-width: 900px) { display: flex; }
+}
+
+// z-index kept BELOW Angular Material's CDK overlay container (z-index: 1000,
+// used by mat-select/mat-menu/mat-dialog/snackbar) so dropdowns opened from
+// inside this panel always render above it instead of being hidden behind it.
+.filter-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.4);
+  z-index: 500; animation: fadeIn 0.2s ease;
+}
+
 // ── Filter sidebar ─────────────────────────────────────────────────────────────
+// Desktop: inline sticky column inside the grid (unchanged).
+// Mobile: hidden by default; when opened it becomes a slide-up panel anchored
+// to the bottom of the screen, scrollable on its own, with its own header/footer —
+// it no longer pins itself above the job list while the page scrolls.
 .filter-sidebar {
   padding: 20px;
   position: sticky;
@@ -61,6 +58,8 @@ $primary: #2E86AB; $accent: #17A589;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px 12px;
     margin-bottom: 16px;
 
     span {
@@ -68,6 +67,23 @@ $primary: #2E86AB; $accent: #17A589;
       font-size: 14px; font-weight: 700; color: #1A202C;
       mat-icon { font-size: 18px; width: 18px; height: 18px; color: $primary; }
     }
+
+    &-actions { display: flex; align-items: center; gap: 12px; }
+  }
+
+  @media (max-width: 900px) {
+    display: none;
+    position: fixed;
+    inset: auto 0 0 0;
+    top: auto;
+    z-index: 501;
+    max-height: 85vh;
+    overflow-y: auto;
+    border-radius: 20px 20px 0 0;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    animation: slideUp 0.25s ease;
+
+    &--open { display: block; }
   }
 }
 
@@ -77,7 +93,30 @@ $primary: #2E86AB; $accent: #17A589;
   &:hover { text-decoration: underline; }
 }
 
+.filter-close {
+  display: none;
+  align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px; border: none;
+  background: #F8FAFC; color: #64748B; cursor: pointer;
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+  &:hover { background: #E2E8F0; }
+
+  @media (max-width: 900px) { display: flex; }
+}
+
 .filter-form { display: flex; flex-direction: column; gap: 8px; }
+
+.filter-apply {
+  display: none;
+  width: 100%;
+  margin-top: 12px;
+  justify-content: center;
+
+  @media (max-width: 900px) { display: flex; }
+}
+
+@keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
 // ── Job cards ──────────────────────────────────────────────────────────────────
 .job-results { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
