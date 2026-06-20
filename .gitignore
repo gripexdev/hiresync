@@ -35,3 +35,6 @@ backend/uploads/
 # ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ── PFE report (local deliverable, not part of the app) ──────────────────────
+rapport-pfe/
