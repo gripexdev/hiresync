@@ -2,7 +2,7 @@
 <div class="page-header">
   <div class="dash-welcome">
     @if (auth.user(); as user) {
-      <img [src]="user.avatarUrl" [alt]="user.fullName" class="dash-welcome__avatar" />
+      <img [src]="user.avatarUrl" [alt]="user.fullName" class="dash-welcome__avatar" referrerpolicy="no-referrer" />
       <div>
         <h1>Bonjour, {{ user.fullName.split(' ')[0] }} 👋</h1>
         <p>Voici un aperçu de votre recherche d'emploi</p>

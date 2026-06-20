@@ -37,7 +37,7 @@
   <div class="sidebar__footer">
     @if (auth.user(); as user) {
       <div class="sidebar__user" [matTooltip]="collapsed ? user.fullName : ''" matTooltipPosition="right">
-        <img class="sidebar__avatar" [src]="user.avatarUrl" [alt]="user.fullName" />
+        <img class="sidebar__avatar" [src]="user.avatarUrl" [alt]="user.fullName" referrerpolicy="no-referrer" />
         @if (!collapsed) {
           <div class="sidebar__user-info">
             <span class="sidebar__user-name">{{ user.fullName }}</span>

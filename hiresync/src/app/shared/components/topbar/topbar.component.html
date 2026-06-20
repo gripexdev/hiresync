@@ -21,7 +21,7 @@
     <!-- User menu -->
     @if (auth.user(); as user) {
       <button class="topbar__user" [matMenuTriggerFor]="userMenu">
-        <img [src]="user.avatarUrl" [alt]="user.fullName" class="topbar__avatar" />
+        <img [src]="user.avatarUrl" [alt]="user.fullName" class="topbar__avatar" referrerpolicy="no-referrer" />
         <span class="topbar__user-name">{{ user.fullName.split(' ')[0] }}</span>
         <mat-icon class="topbar__chevron">expand_more</mat-icon>
       </button>
@@ -30,7 +30,7 @@
     <mat-menu #userMenu="matMenu" xPosition="before">
       @if (auth.user(); as user) {
         <div class="user-menu-header">
-          <img [src]="user.avatarUrl" [alt]="user.fullName" class="user-menu-avatar" />
+          <img [src]="user.avatarUrl" [alt]="user.fullName" class="user-menu-avatar" referrerpolicy="no-referrer" />
           <div>
             <p class="user-menu-name">{{ user.fullName }}</p>
             <p class="user-menu-email">{{ user.email }}</p>
