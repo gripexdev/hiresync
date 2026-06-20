@@ -18,9 +18,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── RabbitMQ ──────────────────────────────────────────────────────────────
+  # ── RabbitMQ (custom image: rabbitmq_prometheus plugin pre-enabled) ──────
   rabbitmq:
-    image: rabbitmq:3.13-management-alpine
+    build: ./infra/rabbitmq
     container_name: hiresync-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: hiresync
@@ -28,6 +28,7 @@ services:
     ports:
       - "5672:5672"    # AMQP
       - "15672:15672"  # Management UI → http://localhost:15672
+      - "15692:15692"  # Prometheus metrics
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
@@ -62,6 +63,9 @@ services:
       RABBITMQ_USER:      hiresync
       RABBITMQ_PASS:      hiresync123
       OPENROUTER_MODEL:   ${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}
+      # Exposes /actuator/prometheus for Prometheus to scrape (see infra/prometheus/prometheus.yml)
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus
+      MANAGEMENT_METRICS_TAGS_APPLICATION: hiresync-backend
       # Other secrets (JWT_SECRET, GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY)
       # come from env_file: ./backend/.env below — do not redeclare them here,
       # explicit `environment:` entries override env_file and would blank them out.
@@ -88,6 +92,50 @@ services:
       - backend
     restart: on-failure
 
+  # ── Postgres exporter (DB metrics for Prometheus) ─────────────────────────
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    container_name: hiresync-postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://hiresync:hiresync123@hiresync-postgres:5432/hiresync?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  # ── Prometheus ────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: hiresync-prometheus
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - backend
+      - rabbitmq
+      - postgres-exporter
+    restart: on-failure
+
+  # ── Grafana ───────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: hiresync-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: on-failure
+
 volumes:
   postgres_data:
     name: backend_postgres_data
@@ -98,3 +146,5 @@ volumes:
   playwright_cache:
     name: backend_playwright_cache
     external: true
+  prometheus_data:
+  grafana_data:

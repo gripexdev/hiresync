@@ -40,7 +40,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
-                        .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
                         // Allow the error dispatch through — otherwise any controller
                         // exception is re-dispatched to /error, re-enters this stateless
                         // chain with an empty context, and gets masked as a 403 (which the
