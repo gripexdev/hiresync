@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
 
   # ── PostgreSQL ────────────────────────────────────────────────────────────
@@ -48,8 +46,10 @@ services:
 
   # ── Spring Boot Backend ───────────────────────────────────────────────────
   backend:
-    build: .
+    build: ./backend
     container_name: hiresync-backend
+    env_file:
+      - ./backend/.env
     ports:
       - "8080:8080"
     environment:
@@ -61,12 +61,10 @@ services:
       RABBITMQ_PORT:      5672
       RABBITMQ_USER:      hiresync
       RABBITMQ_PASS:      hiresync123
-      # Secrets — read from backend/.env (copy .env.example → .env and fill in)
-      JWT_SECRET:         ${JWT_SECRET}
-      GEMINI_API_KEY:     ${GEMINI_API_KEY}
-      GROQ_API_KEY:       ${GROQ_API_KEY}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL:   ${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}
+      # Other secrets (JWT_SECRET, GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY)
+      # come from env_file: ./backend/.env below — do not redeclare them here,
+      # explicit `environment:` entries override env_file and would blank them out.
       FLARESOLVERR_URL:   http://hiresync-flaresolverr:8191
     volumes:
       - cv_uploads:/app/uploads/cvs
@@ -80,7 +78,23 @@ services:
         condition: service_started
     restart: on-failure
 
+  # ── Angular Frontend (built + served by Nginx, reverse-proxies /api,/ws) ──
+  frontend:
+    build: ./hiresync
+    container_name: hiresync-frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - backend
+    restart: on-failure
+
 volumes:
   postgres_data:
+    name: backend_postgres_data
+    external: true
   cv_uploads:
+    name: backend_cv_uploads
+    external: true
   playwright_cache:
+    name: backend_playwright_cache
+    external: true

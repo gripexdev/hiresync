@@ -18,7 +18,7 @@ The AI optimization runs **asynchronously** through a RabbitMQ pipeline and fall
 |---|---|
 | Frontend | Angular 19 (standalone components, **signals**, `@for`/`@if` control flow, Angular Router with lazy `loadComponent`), Angular Material, TailwindCSS, RxJS, `@stomp/stompjs` |
 | Backend | Spring Boot 3.5 / **Java 21**, Spring Data JPA, Spring Security + JWT (JJWT 0.12, **HS384**), Spring WebSocket (STOMP), Spring AMQP |
-| Data / infra | PostgreSQL 16, RabbitMQ, FlareSolverr (Cloudflare bypass for scraping), all via **Docker Compose** |
+| Data / infra | PostgreSQL 16, RabbitMQ, FlareSolverr (Cloudflare bypass for scraping), backend, and frontend (Nginx) — all via one root **Docker Compose** stack |
 | AI | Multi-provider gateway: Gemini 2.0 Flash, Groq Llama 3.3 70B, OpenRouter (`:free`), local Ollama (off by default) |
 
 ---
@@ -29,8 +29,9 @@ This repo has **two sub-projects** under one git root (`Desktop/HireSync`):
 
 | Path | What it is |
 |---|---|
-| `hiresync/` | Angular 19 SPA (the web app) |
+| `hiresync/` | Angular 19 SPA (the web app); has its own `Dockerfile` + `nginx.conf` |
 | `backend/` | Spring Boot API + scrapers + AI pipeline (runs in Docker) |
+| `docker-compose.yml` | Root-level — orchestrates all 5 services (postgres, rabbitmq, flaresolverr, backend, frontend) |
 | `README.md` | Full French documentation of every feature |
 
 ### Frontend (`hiresync/src/app/`)
@@ -53,20 +54,24 @@ This repo has **two sub-projects** under one git root (`Desktop/HireSync`):
 ## Commands
 
 ```bash
-# Frontend (from hiresync/)
+# Full stack — DOCKERIZED, run from repo root (Desktop/HireSync)
+docker compose up -d                                    # start all 5 services: postgres, rabbitmq, flaresolverr, backend, frontend
+docker compose up -d --build --force-recreate backend   # REBUILD after backend code changes
+docker compose up -d --build --force-recreate frontend  # REBUILD after frontend code changes (slower — full ng build inside the image)
+
+# Frontend hot-reload dev loop (from hiresync/) — faster than rebuilding the container for every change
 npm install
-npm start -- --port 4201      # dev server → http://localhost:4201
+npm start -- --port 4201      # dev server → http://localhost:4201, talks to the dockerized backend on :8080
 npm run build                 # production build (ng build) — must pass before "done"
 npx tsc --noEmit              # quick type-check
 
-# Backend + infra (from backend/) — DOCKERIZED
-docker compose up -d                                   # start postgres, rabbitmq, flaresolverr, backend
-docker compose up -d --build --force-recreate backend  # REBUILD after backend code changes
-./mvnw -q -DskipTests compile                          # compile-check on host (does NOT affect the running container)
+./mvnw -q -DskipTests compile  # backend compile-check on host (does NOT affect the running container)
 ```
 
+- Frontend (containerized, Nginx) → `http://localhost:4200` — reverse-proxies `/api` and `/ws` to the backend container, so the browser only ever talks to one origin.
 - Backend → `http://localhost:8080` · RabbitMQ UI → `http://localhost:15672` (hiresync / hiresync123) · Postgres → `5432`.
 - DB schema is auto-created by Hibernate (`ddl-auto: update`). **There is no migrations folder** — new JPA entities auto-create their tables.
+- Backend secrets come from `backend/.env` via `env_file:` in the root `docker-compose.yml` — do **not** also redeclare them under that service's `environment:` block, since explicit `environment:` entries silently override `env_file` values with blanks.
 
 ---
 
@@ -84,6 +89,8 @@ docker compose up -d --build --force-recreate backend  # REBUILD after backend c
 ## Do NOT
 
 - **Do not run the backend with `mvnw`/`java -jar` expecting it to change the live app** — the running backend is the Docker container. After backend edits you **must** `docker compose up -d --build --force-recreate backend`, or the change won't apply.
+- **Do not run `docker compose` from `backend/`** — the compose file lives at the repo root now (it orchestrates the frontend too). The old `backend/docker-compose.yml` was removed.
+- **Do not use `npm ci` in `hiresync/Dockerfile`** — the committed lockfile is missing some optional `@esbuild/*` platform packages, so `npm ci` fails inside the Linux build stage; `npm install` is used instead.
 - **Do not commit `backend/src/main/resources/application.yml`** — it is gitignored and holds secrets (JWT secret, API keys). Edit `application.yml.example` for documented defaults.
 - **Do not reintroduce mock data** — services are wired to the real backend. Keep them real.
 - **Do not verify UTF-8 by piping `curl | python` on Windows** — Python reads stdin as cp1252 and shows fake "mojibake" for correct UTF-8. Check raw bytes (`curl … | xxd`) or the rendered browser DOM instead.
