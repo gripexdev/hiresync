@@ -52,6 +52,12 @@ hiresync:
     secret: "REPLACE_WITH_64_CHAR_RANDOM_STRING_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
     expiration-ms: 86400000    # 24 hours
 
+  google:
+    # ← REQUIRED for "Sign in with Google": OAuth Client ID from
+    # Google Cloud Console → APIs & Services → Credentials. NOT the client secret —
+    # only the Client ID is needed, to verify the audience of incoming ID tokens.
+    client-id: "REPLACE_WITH_YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+
   openrouter:
     # ← REQUIRED: get a free key at https://openrouter.ai/keys
     api-key: "sk-or-v1-REPLACE_WITH_YOUR_KEY"

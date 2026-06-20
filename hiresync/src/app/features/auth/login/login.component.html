@@ -65,6 +65,9 @@
         </button>
       </form>
 
+      <div class="auth-divider"><span>ou</span></div>
+      <app-google-signin-button (credential)="onGoogleCredential($event)" />
+
       <p class="auth-form-card__switch">
         Pas encore de compte ?
         <a routerLink="/register">Créer un compte gratuitement</a>

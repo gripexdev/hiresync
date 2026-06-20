@@ -8,12 +8,14 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AuthService } from '../../../core/auth/auth.service';
+import { GoogleSigninButtonComponent } from '../../../shared/components/google-signin-button/google-signin-button.component';
 
 @Component({
   selector: 'app-login',
   standalone: true,
   imports: [CommonModule, RouterModule, ReactiveFormsModule,
-    MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, MatProgressSpinnerModule],
+    MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, MatProgressSpinnerModule,
+    GoogleSigninButtonComponent],
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.scss'],
 })
@@ -39,6 +41,15 @@ export class LoginComponent {
     this.auth.login({ email: email!, password: password! }).subscribe({
       next: () => this.router.navigate(['/dashboard']),
       error: (e) => { this.error.set(e.message ?? 'Erreur de connexion'); this.loading.set(false); },
+    });
+  }
+
+  onGoogleCredential(idToken: string): void {
+    this.loading.set(true);
+    this.error.set('');
+    this.auth.googleAuth(idToken).subscribe({
+      next: () => this.router.navigate(['/dashboard']),
+      error: (e) => { this.error.set(e.message ?? 'Erreur de connexion avec Google'); this.loading.set(false); },
     });
   }
 }

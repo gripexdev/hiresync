@@ -3,6 +3,7 @@ package ma.hiresync.auth.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import ma.hiresync.auth.dto.AuthResponse;
+import ma.hiresync.auth.dto.GoogleAuthRequest;
 import ma.hiresync.auth.dto.LoginRequest;
 import ma.hiresync.auth.dto.RegisterRequest;
 import ma.hiresync.auth.service.AuthService;
@@ -26,5 +27,11 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest req) {
         return ResponseEntity.ok(authService.login(req));
+    }
+
+    /** POST /api/auth/google — sign in (or sign up, first time) with a Google ID token. */
+    @PostMapping("/google")
+    public ResponseEntity<AuthResponse> google(@Valid @RequestBody GoogleAuthRequest req) {
+        return ResponseEntity.ok(authService.googleAuth(req));
     }
 }

@@ -29,6 +29,22 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private String password;
 
+    /**
+     * "LOCAL" (email/password) or "GOOGLE" — how this account was created.
+     * Nullable at the DB level (not {@code nullable = false}) so adding this
+     * column to the existing `users` table via ddl-auto: update doesn't fail
+     * on rows that predate it; treat null as "LOCAL" wherever it's read.
+     */
+    @Builder.Default
+    private String authProvider = "LOCAL";
+
+    /**
+     * Google's profile photo URL, captured at sign-in. Null for local accounts
+     * (and for Google accounts with no photo) — the frontend falls back to a
+     * generated avatar in that case.
+     */
+    private String avatarUrl;
+
     @Column(nullable = false)
     @Builder.Default
     private String role = "CANDIDATE";

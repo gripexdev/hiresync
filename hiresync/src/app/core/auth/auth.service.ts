@@ -11,10 +11,11 @@ const USER_KEY  = 'hs_user';
 
 /** Shape the Spring Boot backend actually returns */
 interface BackendAuthResponse {
-  token:    string;
-  userId:   string;
-  fullName: string;
-  email:    string;
+  token:     string;
+  userId:    string;
+  fullName:  string;
+  email:     string;
+  avatarUrl: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -67,6 +68,14 @@ export class AuthService {
     );
   }
 
+  /** Exchanges a Google Identity Services ID token for an app session — covers both sign-in and first-time sign-up. */
+  googleAuth(idToken: string): Observable<AuthResponse> {
+    return this.http.post<BackendAuthResponse>(`${environment.apiUrl}/auth/google`, { idToken }).pipe(
+      map(r => this._toAuthResponse(r)),
+      tap(r => this._persist(r)),
+    );
+  }
+
   logout(): void {
     this._clearSession();
     this.router.navigate(['/login']);
@@ -77,7 +86,9 @@ export class AuthService {
       id:       r.userId,
       fullName: r.fullName,
       email:    r.email,
-      avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(r.fullName)}&background=2E86AB&color=fff&size=128`,
+      // Real Google profile photo when we have one (stored server-side at
+      // sign-in); generated initials avatar otherwise.
+      avatarUrl: r.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.fullName)}&background=2E86AB&color=fff&size=128`,
       createdAt: new Date().toISOString(),
     };
     return { token: r.token, user };
