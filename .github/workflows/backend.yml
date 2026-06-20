@@ -38,10 +38,15 @@ jobs:
           cache: maven
           cache-dependency-path: backend/pom.xml
 
+      # -DskipTests: the only test today is the boilerplate contextLoads()
+      # smoke test, which boots the full Spring context and needs a live
+      # Postgres connection that doesn't exist on this runner (same reason
+      # backend/Dockerfile already skips tests in its build stage). Drop
+      # this flag once real tests (Testcontainers-backed) land.
       - name: Build and package
         run: |
           chmod +x mvnw
-          ./mvnw -B -ntp package
+          ./mvnw -B -ntp -DskipTests package
 
       - name: Upload jar artifact
         uses: actions/upload-artifact@v4
