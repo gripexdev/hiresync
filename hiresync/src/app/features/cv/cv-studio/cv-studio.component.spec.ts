@@ -127,18 +127,22 @@ describe('CvStudioComponent', () => {
       expect(snack.open).toHaveBeenCalledWith('❌ Image trop lourde (max 3 MB)', 'OK', { duration: 3000 });
     });
 
-    it('accepts a valid image and embeds it as a data URI, forcing showPhoto on', (done) => {
+    it('accepts a valid image and embeds it as a data URI, forcing showPhoto on', async () => {
       fixture.detectChanges();
       component.togglePhoto(); // showPhoto -> false
       const file = new File(['fake-image-bytes'], 'photo.png', { type: 'image/png' });
 
       component.onPhotoSelected(fileEvent(file));
+      // FileReader.readAsDataURL is real async browser I/O — not a zone-tracked
+      // timer/macrotask, so neither fixture.whenStable() nor fakeAsync's virtual
+      // clock will wait for it. Poll instead of guessing a fixed delay, which
+      // was flaky on slower CI runners.
+      for (let i = 0; i < 50 && !component.cv()?.photo; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
 
-      setTimeout(() => {
-        expect(component.cv()?.photo).toContain('data:');
-        expect(component.options().showPhoto).toBeTrue();
-        done();
-      }, 50);
+      expect(component.cv()?.photo).toContain('data:');
+      expect(component.options().showPhoto).toBeTrue();
     });
   });
 
