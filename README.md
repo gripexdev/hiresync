@@ -38,6 +38,8 @@
 6. [Endpoints API](#6-endpoints-api)
 7. [Variables de configuration](#7-variables-de-configuration)
 8. [Structure des dossiers](#8-structure-des-dossiers)
+9. [Monitoring (Prometheus + Grafana)](#9-monitoring-prometheus--grafana)
+10. [CI/CD (GitHub Actions)](#10-cicd-github-actions)
 
 ---
 
@@ -83,11 +85,21 @@ HireSync est une plateforme web qui aide les candidats marocains à :
 | HTTP | **Angular HttpClient** | Appels REST avec intercepteur JWT automatique |
 
 ### Infrastructure
-| Service | Image Docker | Port |
-|---------|-------------|------|
-| PostgreSQL | `postgres:16-alpine` | 5432 |
-| RabbitMQ | `rabbitmq:3.13-management-alpine` | 5672 (AMQP), 15672 (UI admin) |
-| FlareSolverr | `ghcr.io/flaresolverr/flaresolverr:latest` | 8191 (API interne uniquement) |
+
+Toute l'infrastructure (8 services) est orchestrée par un seul `docker-compose.yml` à la racine du dépôt.
+
+| Service | Image / build | Port | Rôle |
+|---------|---------------|------|------|
+| PostgreSQL | `postgres:16-alpine` | 5432 | Persistance |
+| RabbitMQ | `infra/rabbitmq/` (custom — plugin `rabbitmq_prometheus` pré-activé) | 5672 (AMQP), 15672 (UI admin), 15692 (métriques) | File d'attente asynchrone |
+| FlareSolverr | `ghcr.io/flaresolverr/flaresolverr:latest` | 8191 (API interne uniquement) | Contournement Cloudflare pour le scraping |
+| Backend | `backend/Dockerfile` | 8080 | API Spring Boot |
+| Frontend | `hiresync/Dockerfile` (Nginx, reverse-proxy `/api` + `/ws`) | 4200 | SPA Angular compilée |
+| postgres-exporter | `quay.io/prometheuscommunity/postgres-exporter` | 9187 | Métriques PostgreSQL pour Prometheus |
+| Prometheus | `prom/prometheus` | 9090 | Collecte de métriques |
+| Grafana | `grafana/grafana` | 3000 | Tableaux de bord (datasource + dashboard auto-provisionnés) |
+
+Voir [§9](#9-monitoring-prometheus--grafana) pour le détail du monitoring et [§10](#10-cicd-github-actions) pour le pipeline CI/CD.
 
 ---
 
@@ -1583,48 +1595,60 @@ Offres 1–10 sur 47        [<]  [1]  [2]  …  [5]  [>]
 ## 5. Lancer le projet
 
 ### Prérequis
-- Java 21
-- Docker Desktop (pour PostgreSQL + RabbitMQ)
-- Node.js 20+ et npm
+- Docker Desktop (toute la stack — backend, frontend, DB, broker, monitoring — tourne en conteneurs)
+- Node.js 20+ et npm (uniquement pour la boucle de développement rapide du frontend, optionnelle)
+- Java 21 (uniquement pour compiler le backend hors conteneur, optionnel)
 
-### Étape 1 — Configurer le backend
+### Étape 1 — Configurer les secrets backend
 
 ```bash
-# Copier le template de configuration
-cp backend/src/main/resources/application.yml.example \
-   backend/src/main/resources/application.yml
+cp backend/.env.example backend/.env
 ```
 
-Ouvrez `backend/src/main/resources/application.yml` et remplissez **ces deux valeurs** :
+Ouvrez `backend/.env` et remplissez :
 
-| Champ | Comment l'obtenir |
-|-------|-------------------|
-| `hiresync.openrouter.api-key` | Créez un compte gratuit sur [openrouter.ai/keys](https://openrouter.ai/keys) |
-| `hiresync.jwt.secret` | N'importe quelle chaîne aléatoire de 64+ caractères — ex: `openssl rand -base64 64` |
+| Variable | Comment l'obtenir |
+|----------|-------------------|
+| `JWT_SECRET` | N'importe quelle chaîne aléatoire de 64+ caractères — ex: `openssl rand -base64 64` |
+| `OPENROUTER_API_KEY` | Créez un compte gratuit sur [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `GEMINI_API_KEY` / `GROQ_API_KEY` | Optionnels — fournisseurs IA supplémentaires de la passerelle multi-fournisseurs |
 
-Tout le reste (DB, RabbitMQ) est pré-rempli avec les valeurs du `docker-compose.yml` — **ne pas modifier**.
+Tout le reste (DB, RabbitMQ, ports) est pré-rempli dans `docker-compose.yml` à la racine — **ne pas modifier**.
 
-### Étape 2 — Lancer les services
+### Étape 2 — Lancer toute la stack
+
+Une seule commande, depuis la racine du dépôt (`Desktop/HireSync`) :
 
 ```bash
-# Terminal 1 — Infrastructure (PostgreSQL + RabbitMQ)
-cd backend
 docker compose up -d
-# PostgreSQL  → localhost:5432
-# RabbitMQ UI → http://localhost:15672  (hiresync / hiresync123)
+```
 
-# Terminal 2 — Backend Spring Boot
-cd backend
-./mvnw spring-boot:run          # Linux/macOS
-.\mvnw.cmd spring-boot:run      # Windows
-# → http://localhost:8080
-# Hibernate crée les tables automatiquement au premier démarrage
+Cela démarre les **8 services** : `postgres`, `rabbitmq`, `flaresolverr`, `backend`, `frontend`, `postgres-exporter`, `prometheus`, `grafana`.
 
-# Terminal 3 — Frontend Angular
+| Service | URL |
+|---------|-----|
+| Frontend (Angular, servi par Nginx) | http://localhost:4200 |
+| Backend (API REST) | http://localhost:8080 |
+| RabbitMQ — UI admin | http://localhost:15672 (hiresync / hiresync123) |
+| Grafana | http://localhost:3000 (admin / admin) |
+| Prometheus | http://localhost:9090 |
+
+Après une modification de code :
+
+```bash
+docker compose up -d --build --force-recreate backend   # changement backend
+docker compose up -d --build --force-recreate frontend  # changement frontend
+```
+
+### Boucle de développement rapide (frontend)
+
+Reconstruire l'image Docker à chaque modification est lent (build Angular complet). Pour itérer plus vite sur le frontend, lancez le serveur de développement Angular en parallèle de la stack Docker (le backend dockerisé continue de tourner sur `:8080`) :
+
+```bash
 cd hiresync
 npm install
 npm start -- --port 4201 --no-open
-# → http://localhost:4201
+# → http://localhost:4201, avec hot-reload
 ```
 
 ### Tester rapidement
@@ -1808,6 +1832,74 @@ backend/src/main/java/ma/hiresync/
     ├── WebSocketConfig.java                 STOMP sur SockJS (/ws/notifications)
     └── RabbitMQConfig.java                  cv.exchange + scrape.exchange + enrich.exchange + DLQ + JSON converter
 ```
+
+---
+
+## 9. Monitoring (Prometheus + Grafana)
+
+La stack inclut un monitoring complet, démarré automatiquement avec `docker compose up -d` (voir [§5](#5-lancer-le-projet)).
+
+| Outil | URL | Détail |
+|-------|-----|--------|
+| Grafana | http://localhost:3000 | `admin` / `admin` au premier lancement — le tableau de bord **« HireSync — Vue d'ensemble »** est auto-provisionné (8 panneaux) |
+| Prometheus | http://localhost:9090 | Onglet **Status → Targets** pour vérifier l'état de chaque cible scrapée |
+
+### Sources de métriques
+
+| Source | Endpoint | Mécanisme |
+|--------|----------|-----------|
+| Backend (Spring Boot) | `:8080/actuator/prometheus` | **Micrometer** (`io.micrometer:micrometer-registry-prometheus`) — métriques HTTP (débit, latence par route), JVM (heap, GC), CPU process |
+| RabbitMQ | `:15692/metrics` | Plugin natif **`rabbitmq_prometheus`**, pré-activé via une image Docker custom (`infra/rabbitmq/Dockerfile`) — profondeur de file, nombre de consommateurs par queue |
+| PostgreSQL | `:9187/metrics` | Sidecar **`postgres-exporter`** — connexions actives, statistiques par base |
+
+### Le tableau de bord
+
+Le fichier `infra/grafana/provisioning/dashboards/hiresync-overview.json` définit 8 panneaux :
+
+1. Débit HTTP (requêtes/s, par route et code de statut)
+2. Latence moyenne HTTP par route
+3. Mémoire JVM (heap utilisé vs maximum)
+4. CPU du process backend
+5. RabbitMQ — messages en attente par file
+6. RabbitMQ — consommateurs actifs par file
+7. PostgreSQL — connexions actives
+8. Disponibilité de chaque cible scrapée (`up`)
+
+Le datasource Prometheus et ce tableau de bord sont provisionnés automatiquement au démarrage de Grafana (`infra/grafana/provisioning/`) — aucune configuration manuelle requise. Pour modifier le tableau de bord durablement, éditez le JSON directement (ou modifiez-le dans l'interface Grafana puis exportez le JSON mis à jour), sinon les changements ne survivent pas à un `docker compose down -v`.
+
+### Pourquoi ces choix
+
+L'objectif était de mesurer les trois composants les plus représentatifs de l'architecture asynchrone du projet plutôt que de viser une couverture exhaustive : le backend (latence/débit/JVM), RabbitMQ (puisque tout le traitement IA et le scraping transitent par des files d'attente — la profondeur de file est l'indicateur le plus parlant d'un éventuel engorgement), et PostgreSQL (connexions actives). D'autres outils auraient pu compléter cette stack (cAdvisor pour les métriques par conteneur, Loki pour l'agrégation de logs, Alertmanager pour les alertes), mais ont été jugés hors du périmètre raisonnable pour un projet de fin d'études porté par un développeur unique.
+
+---
+
+## 10. CI/CD (GitHub Actions)
+
+Deux workflows indépendants, chacun filtré sur son propre sous-dossier (`backend/**` ou `hiresync/**`) pour ne pas consommer de minutes CI inutilement sur une modification qui ne le concerne pas.
+
+### `backend.yml`
+
+| Job | Déclencheur | Étapes |
+|-----|-------------|--------|
+| `build` | push + pull request sur `main` | `./mvnw -B -ntp -DskipTests package` (JDK 21 Temurin), upload du jar en artefact |
+| `docker` | après `build` | Build (sans push) de l'image backend et de l'image RabbitMQ custom — détecte une régression du Dockerfile |
+| `publish` | après `build`, **uniquement sur push vers `main`** | Connexion à GHCR, build + push de `ghcr.io/gripexdev/hiresync-backend` (tags `latest` et `sha-<court>`) |
+
+### `frontend.yml`
+
+Structure miroir : `npx tsc --noEmit` + `npm run build` (configuration production) → build Docker (smoke test) → publication sur `ghcr.io/gripexdev/hiresync-frontend` sur push vers `main`.
+
+### Pourquoi les tests backend sont ignorés en CI
+
+Le seul test existant aujourd'hui est le test généré par défaut (`HireSyncBackendApplicationTests.contextLoads()`), qui démarre tout le contexte Spring — et nécessite donc une connexion PostgreSQL réelle, absente sur un runner GitHub Actions nu. Sans `-DskipTests`, le job échoue systématiquement avec `Failed to determine a suitable driver class`. C'est la même raison pour laquelle l'étape de build de `backend/Dockerfile` ignore déjà les tests. Ce drapeau devra être retiré dès qu'une vraie suite de tests (idéalement avec Testcontainers pour fournir une base PostgreSQL éphémère) sera en place — un des axes d'amélioration identifiés au chapitre 5 du rapport de PFE.
+
+### Dependabot
+
+`.github/dependabot.yml` ouvre automatiquement des pull requests hebdomadaires pour : les dépendances Maven (`backend/`), les dépendances npm (`hiresync/`), les images de base des 3 Dockerfiles (`backend/`, `hiresync/`, `infra/rabbitmq/`), et les versions des actions GitHub elles-mêmes.
+
+### Limite connue
+
+`backend/mvnw` doit conserver son bit exécutable dans Git (`git update-index --chmod=+x backend/mvnw`) — ce dépôt ayant été développé sous Windows, ce bit se perd facilement et casse silencieusement `./mvnw` sur le runner Linux. Le workflow exécute aussi un `chmod +x mvnw` défensif avant chaque appel, par sécurité.
 
 ---
 

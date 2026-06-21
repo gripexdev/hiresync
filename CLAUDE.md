@@ -20,6 +20,8 @@ The AI optimization runs **asynchronously** through a RabbitMQ pipeline and fall
 | Backend | Spring Boot 3.5 / **Java 21**, Spring Data JPA, Spring Security + JWT (JJWT 0.12, **HS384**), Spring WebSocket (STOMP), Spring AMQP |
 | Data / infra | PostgreSQL 16, RabbitMQ, FlareSolverr (Cloudflare bypass for scraping), backend, and frontend (Nginx) — all via one root **Docker Compose** stack |
 | AI | Multi-provider gateway: Gemini 2.0 Flash, Groq Llama 3.3 70B, OpenRouter (`:free`), local Ollama (off by default) |
+| Observability | Prometheus + Grafana, backend metrics via Micrometer (`/actuator/prometheus`), RabbitMQ's native `rabbitmq_prometheus` plugin, `postgres-exporter` for DB metrics |
+| CI/CD | GitHub Actions (`backend.yml`, `frontend.yml`) — build/typecheck/Docker-build on every push+PR, image publish to GHCR on push to `main`; Dependabot for Maven/npm/Docker/Actions |
 
 ---
 
@@ -31,7 +33,12 @@ This repo has **two sub-projects** under one git root (`Desktop/HireSync`):
 |---|---|
 | `hiresync/` | Angular 19 SPA (the web app); has its own `Dockerfile` + `nginx.conf` |
 | `backend/` | Spring Boot API + scrapers + AI pipeline (runs in Docker) |
-| `docker-compose.yml` | Root-level — orchestrates all 5 services (postgres, rabbitmq, flaresolverr, backend, frontend) |
+| `infra/rabbitmq/` | Custom RabbitMQ image — pre-enables the `rabbitmq_prometheus` plugin on top of `rabbitmq:3.13-management-alpine` |
+| `infra/prometheus/prometheus.yml` | Scrape config — targets backend, rabbitmq, postgres-exporter |
+| `infra/grafana/provisioning/` | Auto-provisioned datasource (Prometheus) + the `hiresync-overview` dashboard (8 panels) |
+| `.github/workflows/` | `backend.yml` + `frontend.yml` — CI build/typecheck + GHCR publish on push to `main` |
+| `.github/dependabot.yml` | Weekly update PRs for Maven, npm, the 3 Dockerfiles, and GitHub Actions |
+| `docker-compose.yml` | Root-level — orchestrates all 8 services (postgres, rabbitmq, flaresolverr, backend, frontend, postgres-exporter, prometheus, grafana) |
 | `README.md` | Full French documentation of every feature |
 
 ### Frontend (`hiresync/src/app/`)
@@ -75,6 +82,32 @@ npx tsc --noEmit              # quick type-check
 
 ---
 
+## Observability (Prometheus + Grafana)
+
+| Tool | URL | Notes |
+|---|---|---|
+| Grafana | `http://localhost:3000` | login `admin` / `admin` (change after first login) — dashboard "HireSync — Vue d'ensemble" auto-provisioned |
+| Prometheus | `http://localhost:9090` | check `/targets` for scrape health |
+| Backend metrics | `:8080/actuator/prometheus` | via Micrometer (`io.micrometer:micrometer-registry-prometheus`); endpoint is `permitAll()` in `SecurityConfig` since it's never exposed outside the Docker network |
+| RabbitMQ metrics | `:15692/metrics` | native `rabbitmq_prometheus` plugin, pre-enabled in `infra/rabbitmq/Dockerfile` (keeps the original image's entrypoint logic intact — don't try to enable the plugin via `command:` overrides, that breaks `RABBITMQ_DEFAULT_USER`/`PASS`) |
+| Postgres metrics | `:9187/metrics` | `postgres-exporter` sidecar, no changes to the Postgres image |
+
+Dashboard JSON lives at `infra/grafana/provisioning/dashboards/hiresync-overview.json` — edit it directly (or edit-in-Grafana-then-export) rather than building dashboards through the UI from scratch, so changes survive a `docker compose down -v`.
+
+## CI/CD (GitHub Actions)
+
+Two independent workflows, each path-filtered to its own subtree so an unrelated change doesn't burn CI minutes:
+
+- **`backend.yml`** — triggers on `backend/**` changes. `build` job: `./mvnw -B -ntp -DskipTests package` (tests are skipped — see below) → uploads the jar. `docker` job: smoke-builds the backend + RabbitMQ images (not pushed). `publish` job: only on `push` to `main`, builds+pushes `ghcr.io/gripexdev/hiresync-backend` (tags `latest` + `sha-<short>`).
+- **`frontend.yml`** — triggers on `hiresync/**` changes. Mirrors the backend structure: `npx tsc --noEmit` + `npm run build`, then Docker smoke-build, then GHCR publish on push to `main` (`ghcr.io/gripexdev/hiresync-frontend`).
+- Both use `docker/build-push-action` with GitHub Actions cache (`type=gha`) and have a `workflow_dispatch` trigger for manual re-runs.
+
+**Why backend tests are skipped in CI**: the only test that exists is the boilerplate `HireSyncBackendApplicationTests.contextLoads()`, which boots the full Spring context — and that needs a live Postgres connection that doesn't exist on a bare GitHub Actions runner (fails with `Failed to determine a suitable driver class`). Confirmed by reproducing the build on a clean checkout locally. Same reason `backend/Dockerfile`'s build stage already uses `-DskipTests`. Drop the flag once real Testcontainers-backed tests exist.
+
+**`backend/mvnw` executable bit**: this repo was developed on Windows, where git doesn't track the executable bit reliably — `mvnw` was committed as `100644` (non-executable), which silently breaks `./mvnw` on the Linux CI runner. Fixed via `git update-index --chmod=+x backend/mvnw`; the workflow also defensively runs `chmod +x mvnw` before invoking it. If you ever see "permission denied" on `mvnw` in CI, this is why.
+
+---
+
 ## Key conventions
 
 - **Frontend state**: Angular **signals** everywhere (`signal`, `computed`, `.set/.update`), not RxJS `BehaviorSubject` for component state. Components are standalone; use `inject()`.
@@ -90,12 +123,16 @@ npx tsc --noEmit              # quick type-check
 
 - **Do not run the backend with `mvnw`/`java -jar` expecting it to change the live app** — the running backend is the Docker container. After backend edits you **must** `docker compose up -d --build --force-recreate backend`, or the change won't apply.
 - **Do not run `docker compose` from `backend/`** — the compose file lives at the repo root now (it orchestrates the frontend too). The old `backend/docker-compose.yml` was removed.
-- **Do not use `npm ci` in `hiresync/Dockerfile`** — the committed lockfile is missing some optional `@esbuild/*` platform packages, so `npm ci` fails inside the Linux build stage; `npm install` is used instead.
+- **Do not use `npm ci` in `hiresync/Dockerfile`** — the committed lockfile is missing some optional `@esbuild/*` platform packages, so `npm ci` fails inside the Linux build stage; `npm install` is used instead. Same reason `frontend.yml` CI uses `npm install` too.
+- **Do not redeclare `JWT_SECRET`/`GEMINI_API_KEY`/`GROQ_API_KEY`/`OPENROUTER_API_KEY` under the `backend` service's `environment:` block** — they come from `env_file: ./backend/.env`; an `environment:` entry for the same key wins and silently blanks it.
+- **Do not try to enable the RabbitMQ Prometheus plugin via a `command:` override** — it bypasses the image's entrypoint script that applies `RABBITMQ_DEFAULT_USER`/`PASS`. Use the custom image in `infra/rabbitmq/Dockerfile` instead.
+- **Do not remove `-DskipTests` from `backend.yml`** without first adding a real DB (e.g. Testcontainers) for the `contextLoads()` test — the CI runner has no Postgres, so the full test suite fails immediately otherwise.
 - **Do not commit `backend/src/main/resources/application.yml`** — it is gitignored and holds secrets (JWT secret, API keys). Edit `application.yml.example` for documented defaults.
 - **Do not reintroduce mock data** — services are wired to the real backend. Keep them real.
 - **Do not verify UTF-8 by piping `curl | python` on Windows** — Python reads stdin as cp1252 and shows fake "mojibake" for correct UTF-8. Check raw bytes (`curl … | xxd`) or the rendered browser DOM instead.
 - **Do not assume a migrations folder or React Router** — neither exists here (don't confuse with sibling projects).
 - Don't commit or push unless explicitly asked.
+- **Do not add a `Co-Authored-By: Claude` (or any AI) trailer to commit messages in this repo.** This is an academic (PFE) project — commits must show only the student's authorship.
 
 ---
 
