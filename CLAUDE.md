@@ -21,7 +21,8 @@ The AI optimization runs **asynchronously** through a RabbitMQ pipeline and fall
 | Data / infra | PostgreSQL 16, RabbitMQ, FlareSolverr (Cloudflare bypass for scraping), backend, and frontend (Nginx) — all via one root **Docker Compose** stack |
 | AI | Multi-provider gateway: Gemini 2.0 Flash, Groq Llama 3.3 70B, OpenRouter (`:free`), local Ollama (off by default) |
 | Observability | Prometheus + Grafana, backend metrics via Micrometer (`/actuator/prometheus`), RabbitMQ's native `rabbitmq_prometheus` plugin, `postgres-exporter` for DB metrics |
-| CI/CD | GitHub Actions (`backend.yml`, `frontend.yml`) — build/typecheck/Docker-build on every push+PR, image publish to GHCR on push to `main`; Dependabot for Maven/npm/Docker/Actions |
+| CI/CD | GitHub Actions (`backend.yml`, `frontend.yml`) — build/typecheck/**test**/Docker-build on every push+PR, image publish to GHCR on push to `main`; Dependabot for Maven/npm/Docker/Actions |
+| Testing | Backend: 180 JUnit 5 + Mockito unit tests, no Spring context / no live DB. Frontend: 210 Karma + Jasmine unit tests (`ng test --code-coverage`) |
 
 ---
 
@@ -36,7 +37,10 @@ This repo has **two sub-projects** under one git root (`Desktop/HireSync`):
 | `infra/rabbitmq/` | Custom RabbitMQ image — pre-enables the `rabbitmq_prometheus` plugin on top of `rabbitmq:3.13-management-alpine` |
 | `infra/prometheus/prometheus.yml` | Scrape config — targets backend, rabbitmq, postgres-exporter |
 | `infra/grafana/provisioning/` | Auto-provisioned datasource (Prometheus) + the `hiresync-overview` dashboard (8 panels) |
-| `.github/workflows/` | `backend.yml` + `frontend.yml` — CI build/typecheck + GHCR publish on push to `main` |
+| `backend/src/test/java/ma/hiresync/` | 180 JUnit5/Mockito unit tests, mirrors the main package structure (`auth/`, `cv/`, `job/`, `application/`, `notification/`) |
+| `hiresync/src/app/**/*.spec.ts` | 210 Karma/Jasmine unit tests, colocated next to each service/component they test |
+| `hiresync/karma.conf.js` | Defines the `ChromeHeadlessCI` launcher (`--no-sandbox`, needed since tests run as root in Docker/CI) |
+| `.github/workflows/` | `backend.yml` + `frontend.yml` — CI build/typecheck/**test** + GHCR publish on push to `main` |
 | `.github/dependabot.yml` | Weekly update PRs for Maven, npm, the 3 Dockerfiles, and GitHub Actions |
 | `docker-compose.yml` | Root-level — orchestrates all 8 services (postgres, rabbitmq, flaresolverr, backend, frontend, postgres-exporter, prometheus, grafana) |
 | `README.md` | Full French documentation of every feature |
@@ -73,6 +77,11 @@ npm run build                 # production build (ng build) — must pass before
 npx tsc --noEmit              # quick type-check
 
 ./mvnw -q -DskipTests compile  # backend compile-check on host (does NOT affect the running container)
+
+# Tests — run on the host, NOT inside the running container
+./mvnw test                                              # backend: 180 JUnit5/Mockito tests, no DB/RabbitMQ needed
+npx ng test --watch=false --browsers=ChromeHeadlessCI    # frontend: 210 Karma/Jasmine tests (from hiresync/)
+npx ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage  # same, with coverage report (matches CI)
 ```
 
 - Frontend (containerized, Nginx) → `http://localhost:4200` — reverse-proxies `/api` and `/ws` to the backend container, so the browser only ever talks to one origin.
@@ -98,11 +107,13 @@ Dashboard JSON lives at `infra/grafana/provisioning/dashboards/hiresync-overview
 
 Two independent workflows, each path-filtered to its own subtree so an unrelated change doesn't burn CI minutes:
 
-- **`backend.yml`** — triggers on `backend/**` changes. `build` job: `./mvnw -B -ntp -DskipTests package` (tests are skipped — see below) → uploads the jar. `docker` job: smoke-builds the backend + RabbitMQ images (not pushed). `publish` job: only on `push` to `main`, builds+pushes `ghcr.io/gripexdev/hiresync-backend` (tags `latest` + `sha-<short>`).
-- **`frontend.yml`** — triggers on `hiresync/**` changes. Mirrors the backend structure: `npx tsc --noEmit` + `npm run build`, then Docker smoke-build, then GHCR publish on push to `main` (`ghcr.io/gripexdev/hiresync-frontend`).
+- **`backend.yml`** — triggers on `backend/**` changes. `build` job: `./mvnw -B -ntp package` (**no `-DskipTests`** — runs the full 180-test suite), publishes a JUnit report via `dorny/test-reporter`, then uploads the jar. `docker` job: smoke-builds the backend + RabbitMQ images (not pushed). `publish` job: only on `push` to `main`, builds+pushes `ghcr.io/gripexdev/hiresync-backend` (tags `latest` + `sha-<short>`).
+- **`frontend.yml`** — triggers on `hiresync/**` changes. `npx tsc --noEmit` → `npx ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage` (210 tests, coverage report uploaded as an artifact) → `npm run build` → Docker smoke-build → GHCR publish on push to `main` (`ghcr.io/gripexdev/hiresync-frontend`).
 - Both use `docker/build-push-action` with GitHub Actions cache (`type=gha`) and have a `workflow_dispatch` trigger for manual re-runs.
 
-**Why backend tests are skipped in CI**: the only test that exists is the boilerplate `HireSyncBackendApplicationTests.contextLoads()`, which boots the full Spring context — and that needs a live Postgres connection that doesn't exist on a bare GitHub Actions runner (fails with `Failed to determine a suitable driver class`). Confirmed by reproducing the build on a clean checkout locally. Same reason `backend/Dockerfile`'s build stage already uses `-DskipTests`. Drop the flag once real Testcontainers-backed tests exist.
+**Backend tests run in CI now** (the `-DskipTests` flag was removed). The boilerplate `HireSyncBackendApplicationTests.contextLoads()` — which booted the full Spring context and needed a live Postgres connection unavailable on the bare runner — was deleted and replaced by 180 real Mockito-based unit tests that need no DB/RabbitMQ at all. `backend/Dockerfile`'s build stage still uses `-DskipTests` (intentional — keep image builds fast; tests already ran in the `build` job before `docker`/`publish` run).
+
+**Angular Material testing gotcha** (cost real debugging time, worth remembering): `MatDialogModule`/`MatSnackBarModule` each declare `providers: [MatDialog]` / `providers: [MatSnackBar]` on themselves. A standalone component that imports them directly gets a **component-local** injector entry for that token, which silently shadows a `TestBed.configureTestingModule({ providers: [...] })`-level override — the spy is never called, the real implementation runs. Fix: `TestBed.overrideComponent(Component, { add: { providers: [{ provide: MatDialog, useValue: spy }] } })`. Separately, overriding `Router` wholesale via `{ provide: Router, useValue: spy }` breaks `provideRouter([])`'s internal `ActivatedRoute` factory (it reads `router.routerState.root`, undefined on a plain spy) — inject the real router (`TestBed.inject(Router)`) and `spyOn(router, 'navigate')` instead; patch `.url`/`.events` via `Object.defineProperty` *before* `TestBed.createComponent(...)` if the constructor subscribes eagerly.
 
 **`backend/mvnw` executable bit**: this repo was developed on Windows, where git doesn't track the executable bit reliably — `mvnw` was committed as `100644` (non-executable), which silently breaks `./mvnw` on the Linux CI runner. Fixed via `git update-index --chmod=+x backend/mvnw`; the workflow also defensively runs `chmod +x mvnw` before invoking it. If you ever see "permission denied" on `mvnw` in CI, this is why.
 
@@ -126,7 +137,8 @@ Two independent workflows, each path-filtered to its own subtree so an unrelated
 - **Do not use `npm ci` in `hiresync/Dockerfile`** — the committed lockfile is missing some optional `@esbuild/*` platform packages, so `npm ci` fails inside the Linux build stage; `npm install` is used instead. Same reason `frontend.yml` CI uses `npm install` too.
 - **Do not redeclare `JWT_SECRET`/`GEMINI_API_KEY`/`GROQ_API_KEY`/`OPENROUTER_API_KEY` under the `backend` service's `environment:` block** — they come from `env_file: ./backend/.env`; an `environment:` entry for the same key wins and silently blanks it.
 - **Do not try to enable the RabbitMQ Prometheus plugin via a `command:` override** — it bypasses the image's entrypoint script that applies `RABBITMQ_DEFAULT_USER`/`PASS`. Use the custom image in `infra/rabbitmq/Dockerfile` instead.
-- **Do not remove `-DskipTests` from `backend.yml`** without first adding a real DB (e.g. Testcontainers) for the `contextLoads()` test — the CI runner has no Postgres, so the full test suite fails immediately otherwise.
+- **Do not add `-DskipTests` back to `backend.yml`** — the 180-test suite is pure Mockito/unit-level (no Spring context, no DB) and runs fine on the bare CI runner; skipping it would silently regress coverage.
+- **Do not use a fixed `setTimeout(ms)` to wait for real async browser I/O in a Jasmine test** (e.g. `FileReader.readAsDataURL`) — it's not a zone-tracked timer, so neither a hand-picked delay nor `fixture.whenStable()` reliably waits for it, and the GitHub Actions runner is slower/different than a local machine (this caused a real, reproducible CI failure that didn't show up locally). Poll for the expected state in a bounded loop instead (`for (let i = 0; i < N && !condition; i++) await new Promise(r => setTimeout(r, 20));`).
 - **Do not commit `backend/src/main/resources/application.yml`** — it is gitignored and holds secrets (JWT secret, API keys). Edit `application.yml.example` for documented defaults.
 - **Do not reintroduce mock data** — services are wired to the real backend. Keep them real.
 - **Do not verify UTF-8 by piping `curl | python` on Windows** — Python reads stdin as cp1252 and shows fake "mojibake" for correct UTF-8. Check raw bytes (`curl … | xxd`) or the rendered browser DOM instead.

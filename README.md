@@ -1881,17 +1881,24 @@ Deux workflows indépendants, chacun filtré sur son propre sous-dossier (`backe
 
 | Job | Déclencheur | Étapes |
 |-----|-------------|--------|
-| `build` | push + pull request sur `main` | `./mvnw -B -ntp -DskipTests package` (JDK 21 Temurin), upload du jar en artefact |
+| `build` | push + pull request sur `main` | `./mvnw -B -ntp package` (JDK 21 Temurin) — exécute la suite de **180 tests unitaires JUnit 5 / Mockito**, publie les résultats via `dorny/test-reporter` (check "Backend unit tests"), puis upload du jar en artefact |
 | `docker` | après `build` | Build (sans push) de l'image backend et de l'image RabbitMQ custom — détecte une régression du Dockerfile |
 | `publish` | après `build`, **uniquement sur push vers `main`** | Connexion à GHCR, build + push de `ghcr.io/gripexdev/hiresync-backend` (tags `latest` et `sha-<court>`) |
 
 ### `frontend.yml`
 
-Structure miroir : `npx tsc --noEmit` + `npm run build` (configuration production) → build Docker (smoke test) → publication sur `ghcr.io/gripexdev/hiresync-frontend` sur push vers `main`.
+Structure miroir : `npx tsc --noEmit` → **210 tests unitaires Karma/Jasmine** (`npx ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage`, rapport de couverture uploadé en artefact) → `npm run build` (configuration production) → build Docker (smoke test) → publication sur `ghcr.io/gripexdev/hiresync-frontend` sur push vers `main`.
 
-### Pourquoi les tests backend sont ignorés en CI
+### Suite de tests unitaires
 
-Le seul test existant aujourd'hui est le test généré par défaut (`HireSyncBackendApplicationTests.contextLoads()`), qui démarre tout le contexte Spring — et nécessite donc une connexion PostgreSQL réelle, absente sur un runner GitHub Actions nu. Sans `-DskipTests`, le job échoue systématiquement avec `Failed to determine a suitable driver class`. C'est la même raison pour laquelle l'étape de build de `backend/Dockerfile` ignore déjà les tests. Ce drapeau devra être retiré dès qu'une vraie suite de tests (idéalement avec Testcontainers pour fournir une base PostgreSQL éphémère) sera en place — un des axes d'amélioration identifiés au chapitre 5 du rapport de PFE.
+Les deux suites tournent intégralement en CI (plus de `-DskipTests` côté backend) :
+
+- **Backend (180 tests, JUnit 5 + Mockito)** : aucun test ne démarre de contexte Spring ni n'a besoin d'une connexion Postgres/RabbitMQ réelle — chaque collaborateur est mocké (`@Mock`) ou injecté directement (`ReflectionTestUtils`). Couvre les contrôleurs, les consumers RabbitMQ (`OptimizationConsumer`, `ScrapeConsumer`, `EnrichConsumer`), chaque scraper (`RekruteScraperService`, `EmploiMaScraperService`, `IndeedScraperService`, `LinkedInScraperService`, `MarocEmploiScraperService` — testés via réflexion sur leurs méthodes privées de parsing), l'enrichissement (`JobEnrichmentService`), et la génération de PDF (`CvPdfGenerator`, `PdfRenderService` — le `Browser` Playwright est injecté en mock via `ReflectionTestUtils` pour éviter de lancer un vrai Chromium). Le test boilerplate `HireSyncBackendApplicationTests.contextLoads()` a été supprimé — il exigeait une connexion Postgres réelle pour rien.
+- **Frontend (210 tests, Karma + Jasmine)** : couvre tous les services `core/` (`AuthService`, `CvService`, `JobService`, `ApplicationService`, `NotificationService`, `WebSocketService`, le guard et l'intercepteur), les composants de layout (`AppShellComponent`, `SidebarComponent`, `TopbarComponent`), et toutes les pages `features/` (auth, jobs, CV manager/optimizer/studio/historique, candidatures, notifications, landing).
+
+Deux pièges de test Angular Material rencontrés en cours de route, à connaître si vous ajoutez de nouveaux specs :
+1. `MatDialogModule` et `MatSnackBarModule` déclarent chacun `providers: [MatDialog]` / `providers: [MatSnackBar]` sur eux-mêmes. Si un composant standalone les importe directement, cela crée une entrée d'injecteur **locale au composant** qui masque silencieusement un override passé à `TestBed.configureTestingModule({ providers: [...] })` — le mock n'est jamais appelé, c'est l'implémentation réelle qui s'exécute. Solution : re-déclarer l'override via `TestBed.overrideComponent(MonComposant, { add: { providers: [...] } })`.
+2. Remplacer `Router` en entier via `{ provide: Router, useValue: monMock }` casse les mécanismes internes du Router (ex. la factory `ActivatedRoute`, qui lit `router.routerState.root`) dès que `provideRouter([])` est aussi présent. Préférer injecter le vrai router (`TestBed.inject(Router)`) et faire `spyOn(router, 'navigate')`, en patchant `url`/`events` via `Object.defineProperty` **avant** la création du composant si son constructeur s'y abonne directement.
 
 ### Dependabot
 
