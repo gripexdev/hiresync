@@ -39,7 +39,7 @@ export class LoginComponent {
     this.error.set('');
     const { email, password } = this.form.value;
     this.auth.login({ email: email!, password: password! }).subscribe({
-      next: () => this.router.navigate(['/dashboard']),
+      next: () => { this.loading.set(false); this.router.navigate(['/dashboard']); },
       error: (e) => { this.error.set(e.message ?? 'Erreur de connexion'); this.loading.set(false); },
     });
   }
@@ -48,7 +48,7 @@ export class LoginComponent {
     this.loading.set(true);
     this.error.set('');
     this.auth.googleAuth(idToken).subscribe({
-      next: () => this.router.navigate(['/dashboard']),
+      next: () => { this.loading.set(false); this.router.navigate(['/dashboard']); },
       error: (e) => { this.error.set(e.message ?? 'Erreur de connexion avec Google'); this.loading.set(false); },
     });
   }

@@ -24,6 +24,10 @@ jobs:
   build:
     name: Build & package (Maven)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write       # for dorny/test-reporter to publish the JUnit results
+      pull-requests: write
     defaults:
       run:
         working-directory: backend
@@ -38,15 +42,23 @@ jobs:
           cache: maven
           cache-dependency-path: backend/pom.xml
 
-      # -DskipTests: the only test today is the boilerplate contextLoads()
-      # smoke test, which boots the full Spring context and needs a live
-      # Postgres connection that doesn't exist on this runner (same reason
-      # backend/Dockerfile already skips tests in its build stage). Drop
-      # this flag once real tests (Testcontainers-backed) land.
-      - name: Build and package
+      # Runs the unit test suite too (no -DskipTests): every test here mocks
+      # its collaborators (Mockito) or injects fields directly, so none of
+      # them need a live Postgres/RabbitMQ — unlike the old boilerplate
+      # contextLoads() smoke test, which we removed for exactly that reason.
+      - name: Build, test and package
         run: |
           chmod +x mvnw
-          ./mvnw -B -ntp -DskipTests package
+          ./mvnw -B -ntp package
+
+      - name: Publish test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Backend unit tests
+          path: backend/target/surefire-reports/*.xml
+          reporter: java-junit
+          fail-on-error: false
 
       - name: Upload jar artifact
         uses: actions/upload-artifact@v4

@@ -46,6 +46,21 @@ jobs:
       - name: Type-check
         run: npx tsc --noEmit
 
+      # GitHub's ubuntu-latest runner ships Chrome pre-installed and sets
+      # CHROME_BIN already, so karma-chrome-launcher finds it automatically.
+      # ChromeHeadlessCI (defined in karma.conf.js) adds --no-sandbox, needed
+      # because the runner — like our local Docker test runs — executes as root.
+      - name: Unit tests (Karma + Jasmine)
+        run: npx ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: hiresync/coverage/hiresync
+          retention-days: 7
+
       - name: Production build
         run: npm run build -- --configuration production
 
