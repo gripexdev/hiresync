@@ -107,16 +107,12 @@ export class CvOptimizerComponent implements OnInit, OnDestroy {
     this.jobId.set(q['jobId'] ?? '');
     this.cvId.set(q['cvId'] ?? '');
 
-    // ── Key decision: is this a history view or a fresh optimization? ─────────
-    // When coming from history table: no query params → fetch result directly
-    // When coming from cv-manager (new job): has cvId query param → start processing
-    const isNewOptimization = !!q['cvId'];
-
-    if (isNewOptimization) {
-      this._startProcessing();
-    } else {
-      this._loadExistingResult();
-    }
+    // Query params (cvId/jobId/jobTitle) only seed the initial display — they
+    // can't be used to detect "fresh optimization vs. reload" because they
+    // stay in the URL across a reload. Always check real DB status instead;
+    // _loadExistingResult() already falls back to _startProcessing() itself
+    // when the optimization isn't actually done yet.
+    this._loadExistingResult();
   }
 
   ngOnDestroy(): void {
