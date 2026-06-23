@@ -63,7 +63,13 @@ describe('CvOptimizerComponent', () => {
   }
 
   describe('starting a fresh optimization (cvId query param present)', () => {
-    beforeEach(() => setUpComponent({ cvId: 'cv-1', jobId: 'job-1', jobTitle: 'Backend Dev' }));
+    beforeEach(() => {
+      setUpComponent({ cvId: 'cv-1', jobId: 'job-1', jobTitle: 'Backend Dev' });
+      // ngOnInit always checks real status first (_loadExistingResult) — a
+      // brand-new optimization is still queued/processing server-side, so
+      // that check itself falls through to _startProcessing().
+      cvSvc.getOptimizationResult.and.returnValue(of(result({ status: 'queued' })));
+    });
 
     it('connects the WebSocket and starts polling', () => {
       fixture.detectChanges();
@@ -90,7 +96,7 @@ describe('CvOptimizerComponent', () => {
       wsEvents.next({ optimizationId: 'someone-elses-job', status: 'completed' } as CVOptimizationWsEvent);
 
       expect(component.status()).toBe('processing');
-      expect(cvSvc.getOptimizationResult).not.toHaveBeenCalled();
+      expect(cvSvc.getOptimizationResult).toHaveBeenCalledTimes(1);
     });
 
     it('a WS "rejected" event fetches and shows the rejection verdict', () => {
@@ -109,7 +115,7 @@ describe('CvOptimizerComponent', () => {
       wsEvents.next({ optimizationId: 'opt-1', status: 'failed' } as CVOptimizationWsEvent);
 
       expect(component.status()).toBe('failed');
-      expect(cvSvc.getOptimizationResult).not.toHaveBeenCalled();
+      expect(cvSvc.getOptimizationResult).toHaveBeenCalledTimes(1);
     });
 
     it('the polling fallback also resolves a completed result if WS never fires', () => {
