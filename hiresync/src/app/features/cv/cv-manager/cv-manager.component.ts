@@ -179,12 +179,16 @@ export class CvManagerComponent implements OnInit {
   }
 
   private triggerOptimization(cv: CV, job: Job): void {
+    // Some scraped offers have no company name — fall back to the same
+    // placeholder shown in the UI rather than sending a blank string,
+    // which fails the backend's @NotBlank validation with a 400.
+    const company = job.company?.trim() ? job.company : 'Entreprise confidentielle';
     this.svc.optimize({
       cvId: cv.id,
       jobId: job.id,
       jobTitle: job.title,
-      company: job.company ?? '',
-      jobDescription: `${job.title} chez ${job.company ?? ''} — ${job.location ?? ''}. ${job.description ?? ''} Compétences: ${job.requirements?.join(', ') ?? ''}`,
+      company,
+      jobDescription: `${job.title} chez ${company} — ${job.location ?? ''}. ${job.description ?? ''} Compétences: ${job.requirements?.join(', ') ?? ''}`,
     }).subscribe({
       next: res => {
         if (res.alreadyOptimized) {

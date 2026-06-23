@@ -116,13 +116,17 @@ export class JobDetailComponent implements OnInit {
             .onAction().subscribe(() => this.router.navigate(['/cv']));
           return;
         }
+        // Some scraped offers have no company name — fall back to the same
+        // placeholder shown in the UI rather than sending a blank string,
+        // which fails the backend's @NotBlank validation with a 400.
+        const company = job.company?.trim() ? job.company : 'Entreprise confidentielle';
         const jobDescription =
-          `${job.title} chez ${job.company ?? ''} — ${job.location ?? ''}. ${job.description ?? ''} ` +
+          `${job.title} chez ${company} — ${job.location ?? ''}. ${job.description ?? ''} ` +
           `Compétences: ${(job.requirements ?? []).join(', ')}`;
 
         this.cvSvc.optimize({
           cvId: cv.id, jobId: job.id, jobTitle: job.title,
-          company: job.company ?? '', jobDescription,
+          company, jobDescription,
         }).subscribe({
           next: res => {
             this.optimizing.set(false);
