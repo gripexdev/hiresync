@@ -1,5 +1,5 @@
 # ── Stage 1: Build ───────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jdk-alpine AS build
+FROM eclipse-temurin:25-jdk-alpine AS build
 WORKDIR /app
 
 # Cache dependencies before copying source
@@ -14,7 +14,7 @@ RUN ./mvnw package -DskipTests -q
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
 # Ubuntu (jammy) — required for Playwright's own Chromium binary (glibc)
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:25-jre-jammy
 WORKDIR /app
 
 # Playwright Chromium runtime dependencies
