@@ -104,7 +104,7 @@
 		<dependency>
 			<groupId>org.apache.pdfbox</groupId>
 			<artifactId>pdfbox</artifactId>
-			<version>3.0.3</version>
+			<version>3.0.7</version>
 		</dependency>
 
 		<!-- ── Headless Chrome PDF rendering (vector-quality CV export) ─────── -->
