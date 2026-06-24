@@ -1,2 +1,2 @@
-FROM rabbitmq:3.13-management-alpine
+FROM rabbitmq:4.3-management-alpine
 RUN rabbitmq-plugins enable --offline rabbitmq_prometheus
