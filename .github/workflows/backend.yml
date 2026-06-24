@@ -78,7 +78,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build backend image (smoke test, not pushed)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           push: false
@@ -86,7 +86,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend
 
       - name: Build RabbitMQ (prometheus plugin) image (smoke test, not pushed)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./infra/rabbitmq
           push: false
@@ -124,7 +124,7 @@ jobs:
             type=sha,format=short
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           push: true
